@@ -244,6 +244,10 @@
   .addr-row{display:flex; gap:8px; align-items:center;}
   .addr-row input{width:80px; padding:7px 9px; border:1px solid var(--line); border-radius:7px; font-family:var(--mono); font-size:13px;}
   .addr-row button{border:1px solid var(--line); background:#fff; border-radius:7px; padding:7px 10px; font-size:12px; cursor:pointer;}
+  .warn-i, .warn-badge{display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; border-radius:50%; background:#F5A623; color:#fff; font-weight:800; font-size:11px; font-family:Arial,sans-serif; line-height:1; cursor:help; vertical-align:middle;}
+  .warn-badge{position:absolute; width:24px; height:24px; font-size:15px; transform:translate(-50%,-50%); pointer-events:auto; box-shadow:0 2px 8px rgba(0,0,0,.35), 0 0 0 3px rgba(245,166,35,.35); z-index:5;}
+  #warn-layer{position:absolute; inset:0; overflow:hidden; pointer-events:none;}
+  .readout .warn b{color:#FFB84D;}
   .addr-warn{color:#C0392B; font-size:11.5px; margin-top:6px;}
   .readout span{white-space:nowrap;}
   .readout span b{color:#fff; font-weight:500;}
@@ -604,7 +608,7 @@
     </div>
 
     <div class="viewport-wrap">
-      <div id="canvas-host"></div>
+      <div id="canvas-host"></div><div id="warn-layer"></div>
       <div class="view-toolbar">
         <button class="on" data-view="iso">Iso</button>
         <button data-view="front">Front</button>
@@ -1066,7 +1070,7 @@ function renderRightPanel(){
           <div class="bom-row" draggable="${m.first ? 'false' : 'true'}" data-idx="${idx}">
             <span class="bom-grip" title="Ziehen zum Umordnen">⋮⋮</span>
             <div class="module-swatch" style="background:${m.color};"></div>
-            <div class="bom-name">${m.name}<small>${currentEnclosure === 'cabinet' && binById(pm.bin) ? binLabel(binById(pm.bin)) + ' · ' : ''}Pos. ${idx + 1} · ${uartOf(pm) ? `UART ${uartOf(pm)} · Adr. ${addrOf(pm)}${addrDup(pm) ? ' ⚠' : ''} · ` : ''}${m.article ? 'Art.-Nr. ' + m.article : 'Best.-Nr. GI-' + m.id.toUpperCase() + '-X'}</small></div>
+            <div class="bom-name">${m.name}<small>${currentEnclosure === 'cabinet' && binById(pm.bin) ? binLabel(binById(pm.bin)) + ' · ' : ''}Pos. ${idx + 1} · ${needsUart(pm) ? `<span class="warn-i" title="${UART_WARN}">!</span> ` : ''}${uartOf(pm) ? `UART ${uartOf(pm)} · Adr. ${addrOf(pm)}${addrDup(pm) ? ' ⚠' : ''} · ` : ''}${m.article ? 'Art.-Nr. ' + m.article : 'Best.-Nr. GI-' + m.id.toUpperCase() + '-X'}</small></div>
             ${m.stepModel ? `<button class="bom-view" data-view="${m.id}" title="3D ansehen">3D</button>` : ''}
             <button class="bom-remove" data-idx="${idx}">✕</button>
           </div>
@@ -1133,7 +1137,9 @@ function setCabinetGeometry(optId){
 function typeOf(pm){ return MODULE_TYPES.find(x => x.id === pm.id); }
 /* ---------- UART / Adresse ---------- */
 let lastUart = 1;
-function uartOf(pm){ return typeOf(pm).first ? null : (pm.uart || 1); }
+function uartOf(pm){ return typeOf(pm).first ? null : (pm.uart || null); }
+function needsUart(pm){ return !typeOf(pm).first && !pm.uart; }
+const UART_WARN = 'Fehlende UART-Definition';
 function addrOf(pm){
   if(pm.addr != null) return pm.addr;
   const u = uartOf(pm); if(u == null) return null;
@@ -1289,7 +1295,7 @@ function addModule(id){
   if(m.unique && placedModules.some(pm => pm.id === id)){ toast(m.name + ' kann nur einmal pro Konfiguration verwendet werden.'); return; }
   if(currentEnclosure !== 'cabinet'){
     if(placedModules.length >= TOTAL_SLOTS){ toast('Alle Modulplätze sind belegt.'); return; }
-    if(m.first) placedModules.unshift({ id, row:0 }); else placedModules.push({ id, row:0, uart:lastUart });
+    if(m.first) placedModules.unshift({ id, row:0 }); else placedModules.push({ id, row:0 });
     refreshAll(); return;
   }
   if(!bins.length){ toast('Zuerst im Schritt „Bins / Einschübe“ einen Bin hinzufügen – dann können Module eingesetzt werden.'); return; }
@@ -1301,7 +1307,7 @@ function addModule(id){
     target = (act && binHasRoom(act, w)) ? act : order.find(b => binHasRoom(b, w));
   }
   if(!target){ toast('Kein Bin hat noch Platz für dieses Modul. Fügen Sie einen weiteren Bin hinzu.'); return; }
-  const pm = { id, bin: target.id, uart: lastUart };
+  const pm = { id, bin: target.id };
   if(m.first) placedModules.unshift(pm);
   else {
     let at = placedModules.length;
@@ -1354,12 +1360,13 @@ function refreshSummary(){
 
   const readout = document.getElementById('readout');
   const full = TOTAL_SLOTS > 0 && placedModules.length >= TOTAL_SLOTS;
+  const missingUart = placedModules.filter(needsUart).length;
   readout.innerHTML = `
     <span>PROJEKT <b>PRÜFSTAND BREMSSYSTEM</b></span><span class="sep">/</span>
     <span>BAUFORM <b>${cfg.bauformLabel.toUpperCase()}</b></span><span class="sep">/</span>
     <span>${cfg.ipLabel}</span><span class="sep">/</span>
     <span>MODULE <b>${placedModules.length}/${TOTAL_SLOTS}</b></span><span class="sep">/</span>
-    <span class="ok">STATUS <b>${full ? 'MAXIMALBELEGUNG' : (currentEnclosure === 'cabinet' && !bins.length) ? 'KEINE BINS' : 'KONFIGURATION GÜLTIG'}</b></span><span class="sep">/</span>
+    <span class="${missingUart ? 'warn' : 'ok'}">STATUS <b>${missingUart ? 'UART-DEFINITION FEHLT (' + missingUart + ')' : full ? 'MAXIMALBELEGUNG' : (currentEnclosure === 'cabinet' && !bins.length) ? 'KEINE BINS' : 'KONFIGURATION GÜLTIG'}</b></span><span class="sep">/</span>
     <span>LEISTUNGSBUDGET <b>${power} / ${cfg.powerMax} W</b></span>
   `;
 }
@@ -2043,13 +2050,13 @@ function openModuleInfo(pm){
   document.getElementById('info-sub').textContent = (m.article ? 'Art.-Nr. ' + m.article : 'Best.-Nr. GI-' + m.id.toUpperCase() + '-X')
     + ' · ' + (currentEnclosure === 'cabinet' && binById(pm.bin) ? binLabel(binById(pm.bin)) + ' · ' : '') + 'Pos. ' + (idx + 1);
   const row = (k, v) => `<dt>${k}</dt><dd>${v || PH}</dd>`;
-  const u = uartOf(pm);
-  infoDraft = u == null ? null : { uart: u, addr: pm.addr != null ? pm.addr : null };
-  const comm = u == null
+  const u = uartOf(pm), isSt = !!typeOf(pm).first;
+  infoDraft = isSt ? null : { uart: u, addr: pm.addr != null ? pm.addr : null };
+  const comm = isSt
     ? `<div class="info-sec"><h4>Kommunikation</h4><p>Controller – ist mit allen UARTs (1–4) verbunden.</p></div>`
     : `<div class="info-sec"><h4>Kommunikation</h4>
-        <div class="addr-row" style="margin-bottom:10px;"><label for="uart-in" style="font-size:12px;width:52px;">UART</label><input id="uart-in" type="number" min="1" max="4" value="${u}"><span style="font-size:11.5px;color:var(--muted-2);">1 – 4</span></div>
-        <div class="addr-row"><label for="addr-in" style="font-size:12px;width:52px;">Adresse</label><input id="addr-in" type="number" min="1" max="255" value="${addrOf(pm)}"><button type="button" id="addr-auto">Automatisch</button>
+        <div class="addr-row" style="margin-bottom:10px;"><label for="uart-in" style="font-size:12px;width:52px;">UART</label><input id="uart-in" type="number" min="1" max="4" value="${u || ''}"><span style="font-size:11.5px;color:var(--muted-2);">1 – 4</span><span class="warn-i" id="uart-warn" title="${UART_WARN}" style="display:none;">!</span></div>
+        <div class="addr-row"><label for="addr-in" style="font-size:12px;width:52px;">Adresse</label><input id="addr-in" type="number" min="1" max="255" value="${addrOf(pm) ?? ''}"><button type="button" id="addr-auto">Automatisch</button>
         <span id="addr-mode" style="font-size:11.5px;color:var(--muted-2);"></span></div>
         <div class="addr-warn" id="addr-warn"></div>
         <div id="dirty-note" style="font-size:11.5px;color:#B26A00;margin-top:8px;display:none;">Ungespeicherte Änderungen – mit „Speichern“ übernehmen.</div></div>`;
@@ -2067,7 +2074,7 @@ function openModuleInfo(pm){
   document.getElementById('info-save').style.display = infoDraft ? '' : 'none';
   if(infoDraft){
     const uin = document.getElementById('uart-in'), ain = document.getElementById('addr-in');
-    uin.oninput = () => { const v = parseInt(uin.value); if(v >= 1 && v <= 4){ infoDraft.uart = v; infoDraft.addr = null; } draftSync(); };
+    uin.oninput = () => { const v = parseInt(uin.value); infoDraft.uart = (v >= 1 && v <= 4) ? v : null; infoDraft.addr = null; draftSync(); };
     ain.oninput = () => { const v = parseInt(ain.value); infoDraft.addr = (v >= 1 && v <= 255) ? v : null; draftSync(true); };
     document.getElementById('addr-auto').onclick = () => { infoDraft.addr = null; draftSync(); };
     draftSync(true);
@@ -2075,15 +2082,17 @@ function openModuleInfo(pm){
   document.getElementById('info-overlay').classList.add('show');
 }
 let infoDraft = null;
-function autoAddrFor(pm, u){ let n = 0; for(const q of placedModules){ if(q === pm) break; if(uartOf(q) === u) n++; } return n + 1; }
+function autoAddrFor(pm, u){ if(!u) return ''; let n = 0; for(const q of placedModules){ if(q === pm) break; if(uartOf(q) === u) n++; } return n + 1; }
 function draftAddr(pm){ return infoDraft.addr != null ? infoDraft.addr : autoAddrFor(pm, infoDraft.uart); }
 function draftSync(keepInput){
   const pm = infoPm; if(!pm || !infoDraft) return;
   const ain = document.getElementById('addr-in'), a = draftAddr(pm);
   if(!keepInput) ain.value = a;
+  ain.disabled = !infoDraft.uart;
+  document.getElementById('uart-warn').style.display = infoDraft.uart ? 'none' : '';
   document.getElementById('addr-mode').textContent = infoDraft.addr == null ? 'chronologisch vergeben' : 'manuell gesetzt';
-  document.getElementById('addr-auto').disabled = infoDraft.addr == null;
-  const dup = placedModules.some(q => q !== pm && uartOf(q) === infoDraft.uart && addrOf(q) === a);
+  document.getElementById('addr-auto').disabled = infoDraft.addr == null || !infoDraft.uart;
+  const dup = !!infoDraft.uart && placedModules.some(q => q !== pm && uartOf(q) === infoDraft.uart && addrOf(q) === a);
   document.getElementById('addr-warn').textContent = dup ? `Achtung: Diese Adresse ist auf UART ${infoDraft.uart} bereits vergeben.` : '';
   document.getElementById('dirty-note').style.display = infoDirty() ? '' : 'none';
 }
@@ -2097,7 +2106,7 @@ function requestCloseInfo(){
 }
 function saveInfo(){
   const pm = infoPm; if(!pm || !infoDraft) return;
-  pm.uart = lastUart = infoDraft.uart;
+  if(infoDraft.uart) pm.uart = infoDraft.uart; else delete pm.uart;
   if(infoDraft.addr != null) pm.addr = infoDraft.addr; else delete pm.addr;
   closeModuleInfo(); refreshAll(); toast('Modul gespeichert.');
 }
@@ -2279,10 +2288,24 @@ function disposeTree(o){
     ms.forEach(mt => { if(!(mt.userData && mt.userData.shared)) mt.dispose(); });
   });
 }
+let warnItems = [];
+const _wv = new THREE.Vector3();
+function updateWarnBadges(){
+  if(!warnItems.length || !camera) return;
+  const host = document.getElementById('canvas-host'), w = host.clientWidth, h = host.clientHeight;
+  moduleGroup.updateWorldMatrix(true, false);
+  warnItems.forEach(it => {
+    _wv.copy(it.pos).applyMatrix4(moduleGroup.matrixWorld).project(camera);
+    const vis = _wv.z < 1 && _wv.z > -1;
+    it.el.style.display = vis ? '' : 'none';
+    it.el.style.left = ((_wv.x + 1) / 2 * w) + 'px'; it.el.style.top = ((1 - _wv.y) / 2 * h) + 'px';
+  });
+}
 function rebuildModulesIn3D(){
   if(!moduleGroup) return;
   while(moduleGroup.children.length){ const c = moduleGroup.children[0]; moduleGroup.remove(c); disposeTree(c); }
   rebuildBins3D();
+  warnItems.forEach(w => w.el.remove()); warnItems = [];
   const layout = computeLayout(placedModules);
 
   placedModules.forEach((pm, idx) => {
@@ -2297,6 +2320,13 @@ function rebuildModulesIn3D(){
       : currentEnclosure === 'brixx'
       ? buildBrixxModuleMesh(m, p, idx)
       : buildCabinetModuleMesh(m, p, idx);
+    if(needsUart(pm)){
+      const sm = m.stepModel && window.STEP_MODELS && window.STEP_MODELS[m.stepModel];
+      const el = document.createElement('div'); el.className = 'warn-badge'; el.textContent = '!'; el.title = UART_WARN;
+      el.addEventListener('click', () => openModuleInfo(pm));
+      document.getElementById('warn-layer').appendChild(el);
+      warnItems.push({ el, pos: new THREE.Vector3(p.x, p.y + (sm ? sm.sizeMM[1] * MM_TO_UNIT / 2 - 0.35 : 0.7), p.z + (sm ? sm.sizeMM[2] * MM_TO_UNIT : 0.5)) });
+    }
     if(filterActive() && !matchesFilter(pm)) dimGroup(group);
     moduleGroup.add(group);
   });
@@ -2427,6 +2457,7 @@ function animate(){
   if(autoRotate && !(drag && drag.active)) cabinetGroup.rotation.y += 0.006;
   controls.update();
   renderer.render(scene, camera);
+  updateWarnBadges();
 }
 
 /* view preset buttons — read camera presets from the active enclosure config */
