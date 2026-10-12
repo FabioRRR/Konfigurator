@@ -1239,10 +1239,42 @@ function ductSnapped(d, ignore){
   return { orient:'V', x, y:top, len:top - bot };
 }
 function ductChanged(d, n){ return Math.abs(n.x - d.x) > 0.001 || Math.abs(n.y - d.y) > 0.001 || Math.abs(n.len - d.len) > 0.001; }
+/* Kreuzungen: waagrechte Kanäle laufen durch, senkrechte werden bündig an ihnen gekürzt bzw. getrennt */
+function ductsCross(h, v){
+  const a = ductRect(h), b = ductRect(v), E = 0.001;
+  return b.x1 > a.x0 + E && b.x0 < a.x1 - E && b.y1 > a.y0 + E && b.y0 < a.y1 - E;
+}
+function ductCrosses(d){ return ducts.some(o => o.orient !== d.orient && (d.orient === 'H' ? ductsCross(d, o) : ductsCross(o, d))); }
+function resolveCrossings(){
+  let any = false; const E = 0.001, M = DUCT.minLen;
+  ducts.filter(d => d.orient === 'H').forEach(h => {
+    const rh = ductRect(h);
+    ducts.filter(d => d.orient === 'V').forEach(v => {
+      if(!ducts.includes(v) || !ductsCross(h, v)) return;
+      any = true;
+      const rv = ductRect(v);
+      const topIn = rv.y1 <= rh.y1 + E, botIn = rv.y0 >= rh.y0 - E;
+      const drop = () => { ducts = ducts.filter(x => x !== v); if(activeDuct === v.id) activeDuct = null; };
+      if(topIn && botIn){ drop(); return; }
+      if(!topIn && !botIn){                                   // senkrechter Kanal läuft quer durch → in zwei Teile trennen
+        const up = rv.y1 - rh.y1, lo = rh.y0 - rv.y0;
+        if(up >= M && lo >= M){ v.len = up; ducts.push({ id: ++ductSeq, name: 'KK' + ductSeq, orient:'V', x:v.x, y:rh.y0, len:lo }); }
+        else if(up >= M){ v.len = up; }
+        else if(lo >= M){ v.y = rh.y0; v.len = lo; }
+        else drop();
+        return;
+      }
+      if(topIn){ const len = rh.y0 - rv.y0; if(len >= M){ v.y = rh.y0; v.len = len; } else drop(); }       // Kanal liegt unterhalb
+      else { const len = rv.y1 - rh.y1; if(len >= M){ v.len = len; } else drop(); }                           // Kanal liegt oberhalb
+    });
+  });
+  return any;
+}
+function ductNeedsFlush(d){ return ductCrosses(d) || ductChanged(d, ductSnapped(d, d.id)); }
 function flushDucts(list){
-  let any = false;
-  for(let pass = 0; pass < 3; pass++) list.forEach(d => { const n = ductSnapped(d, d.id); if(ductChanged(d, n)){ Object.assign(d, n); any = true; } });
-  if(any) refreshAll(); else toast('Kabelkanäle schließen bereits bündig ab bzw. kein Anschluss in Reichweite (80 mm).');
+  let any = resolveCrossings();
+  for(let pass = 0; pass < 3; pass++) list.filter(d => ducts.includes(d)).forEach(d => { const n = ductSnapped(d, d.id); if(ductChanged(d, n)){ Object.assign(d, n); any = true; } });
+  if(any) refreshAll(); else toast('Nichts anzupassen: keine Kreuzung und kein Anschluss in Reichweite (80 mm).');
 }
 function ductById(id){ return ducts.find(d => d.id === id) || null; }
 function setActiveDuct(id){ activeDuct = activeDuct === id ? null : id; renderDuctPlanner(); if(sceneInited) rebuildModulesIn3D(); }
@@ -1287,18 +1319,20 @@ function finishDuct(d){
   if(d.len < DUCT.minLen){ toast('Kabelkanal zu kurz – mindestens 50 mm.'); return; }
   if(ductHitsBin(d)){ toast('Dort liegt ein Bin. Kabelkanäle bitte zwischen/neben den Bins platzieren.'); return; }
   const nd = { id: ++ductSeq, name: 'KK' + ductSeq, ...d };
-  ducts.push(nd); activeDuct = nd.id; cancelDuctMode(); refreshAll();
+  ducts.push(nd); activeDuct = nd.id; cancelDuctMode();
+  if(resolveCrossings()) toast('Kreuzung erkannt: senkrechte Kanäle wurden bündig an den waagrechten getrennt/gekürzt.');
+  refreshAll();
 }
 function renderDuctPlanner(){
   const host = document.getElementById('duct-planner'); if(!host) return;
   host.innerHTML = `
-    <div class="duct-note">Kabelkanal-Querschnitt <b>25 × 40 mm</b> (Breite × Tiefe), nur waagrecht oder senkrecht. Länge nachträglich änderbar. Beim Zeichnen rasten Enden bis 80 mm Abstand bündig an anderen Kanälen ein; mit ⇥ lassen sich bestehende Kanäle nachträglich bündig anschließen.</div>
+    <div class="duct-note">Kabelkanal-Querschnitt <b>25 × 40 mm</b> (Breite × Tiefe), nur waagrecht oder senkrecht. Länge nachträglich änderbar. Beim Zeichnen rasten Enden bis 80 mm Abstand bündig an anderen Kanälen ein; mit ⇥ lassen sich bestehende Kanäle nachträglich bündig anschließen. Kreuzen sich senkrechte und waagrechte Kanäle, läuft der waagrechte durch und der senkrechte wird bündig daran gekürzt (bzw. in zwei Teile getrennt).</div>
     <button type="button" class="duct-btn ${ductMode ? 'cancel' : ''}" id="duct-start">${ductMode ? 'Abbrechen' : '＋ Kabelkanal platzieren'}</button>
-    <button type="button" class="duct-btn cancel" id="duct-flush-all" ${ducts.some(d => ductChanged(d, ductSnapped(d, d.id))) ? '' : 'disabled'} title="Alle Kanäle bündig aneinander anschließen">⇥ Alle bündig anschließen</button>
+    <button type="button" class="duct-btn cancel" id="duct-flush-all" ${ducts.some(ductNeedsFlush) ? '' : 'disabled'} title="Alle Kanäle bündig aneinander anschließen">⇥ Alle bündig anschließen</button>
     ${ducts.map(d => `<div class="duct-row ${d.id === activeDuct ? 'sel' : ''} ${ductHitsBin(d) ? 'bad' : ''}" data-d="${d.id}">
         <b>${d.name}</b><span>${d.orient === 'H' ? 'waagrecht' : 'senkrecht'}</span>
         <input type="number" min="50" step="10" value="${Math.round(d.len * 100)}" data-len="${d.id}"><span>mm</span>
-        <button type="button" data-flush="${d.id}" title="Bündig anschließen" ${ductChanged(d, ductSnapped(d, d.id)) ? '' : 'disabled'}>⇥</button>
+        <button type="button" data-flush="${d.id}" title="Bündig anschließen" ${ductNeedsFlush(d) ? '' : 'disabled'}>⇥</button>
         <button type="button" class="x" data-del="${d.id}" title="Entfernen">✕</button>
         ${ductHitsBin(d) ? '<small title="Kabelkanal überschneidet einen Bin">⚠ kollidiert</small>' : ''}
       </div>`).join('') || '<div class="duct-note">Noch keine Kabelkanäle.</div>'}`;
