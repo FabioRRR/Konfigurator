@@ -12,3 +12,4 @@ Gantner Instruments – Kunden-Konfigurator (Dashboard → Projekttyp → 3D-Kon
 - `tools/models/qs.gmod.json` – Q.station X (Art.-Nr. 561828), steht immer am Anfang, nur einmal
 - `tools/models/a128.gmod.json` – Q.bloxx-X A128 (Art.-Nr. 565327)
 - `tools/models/cab_1034|1050|1059.gmod.json` – Schaltschrank-Varianten für die Hardware-Auswahl (Typ 1034.000 / 1050.000 / 1059.000)
+- weitere Schrank-Varianten: `cab_1033500`, `cab_1380`, `cab_1350`, `cab_1376`, `cab_1091` (Hardware-Auswahl, 8 Varianten gesamt)

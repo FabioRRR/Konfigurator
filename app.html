@@ -265,28 +265,28 @@
   #canvas-host{position:absolute; inset:0;}
   /* ---- Projekt-Assistent ---- */
   #view-wizard.active{display:flex !important; flex-direction:column; min-height:100vh; background:#F5F7FA;}
-  .wiz-main{flex:1; width:100%; max-width:1180px; margin:0 auto; padding:34px 32px 20px;}
+  .wiz-main{flex:1; width:100%; max-width:1360px; margin:0 auto; padding:34px 32px 20px;}
   .wiz-steps{display:flex; align-items:center; gap:10px; font-family:var(--mono); font-size:11px; color:var(--muted-2); letter-spacing:.06em; text-transform:uppercase; margin-bottom:14px;}
   .wiz-steps .dot{width:22px; height:22px; border-radius:50%; background:var(--blue); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700;}
   .wiz-steps b{color:var(--navy);}
   .wiz-main h1{margin:0 0 6px; font-size:28px; color:var(--navy); letter-spacing:-.01em;}
   .wiz-main .wiz-sub{margin:0 0 26px; color:var(--muted); font-size:15px; max-width:680px;}
-  .opt-grid{display:grid; grid-template-columns:repeat(3, 1fr); gap:20px;}
+  .opt-grid{display:grid; grid-template-columns:repeat(4, 1fr); gap:18px;}
   .opt-card{background:#fff; border:2px solid var(--line); border-radius:16px; overflow:hidden; display:flex; flex-direction:column; cursor:pointer; transition:border-color .15s, box-shadow .15s, transform .15s; position:relative;}
   .opt-card:hover{border-color:#B9C8E3; box-shadow:0 14px 30px -18px rgba(11,42,82,.45);}
   .opt-card.selected{border-color:var(--blue); box-shadow:0 0 0 4px rgba(27,95,214,.14), 0 14px 30px -18px rgba(11,42,82,.45);}
-  .opt-preview{height:270px; background:linear-gradient(180deg,#F1F4F8 0%,#E1E7EE 100%); position:relative;}
+  .opt-preview{height:220px; background:linear-gradient(180deg,#F1F4F8 0%,#E1E7EE 100%); position:relative;}
   .opt-preview canvas{width:100%; height:100%; display:block;}
   .opt-badge{position:absolute; top:12px; left:12px; font-family:var(--mono); font-size:10.5px; font-weight:600; background:#fff; color:var(--navy); border:1px solid var(--line); border-radius:6px; padding:4px 8px;}
   .opt-check{position:absolute; top:12px; right:12px; width:26px; height:26px; border-radius:50%; border:2px solid #C6D0DE; background:#fff; display:flex; align-items:center; justify-content:center; color:#fff; font-size:14px;}
   .opt-card.selected .opt-check{background:var(--blue); border-color:var(--blue);}
   .opt-body{padding:18px 20px 8px; flex:1;}
-  .opt-body h3{margin:0 0 4px; font-size:18px; color:var(--navy);}
+  .opt-body h3{margin:0 0 4px; font-size:16.5px; color:var(--navy);}
   .opt-body .opt-desc{margin:0 0 12px; font-size:13px; color:var(--muted);}
   .opt-dims{display:grid; grid-template-columns:auto 1fr; gap:4px 14px; font-size:13px; margin:0;}
   .opt-dims dt{color:var(--muted);} .opt-dims dd{margin:0; color:var(--navy); font-family:var(--mono); font-size:12.5px;}
   .opt-actions{display:flex; gap:8px; padding:12px 20px 18px;}
-  .opt-actions button{flex:1; border:1px solid var(--line); background:#fff; border-radius:9px; padding:9px 10px; font-size:13px; font-weight:600; color:var(--navy); cursor:pointer;}
+  .opt-actions button{flex:1; border:1px solid var(--line); background:#fff; border-radius:9px; padding:9px 6px; font-size:12.5px; font-weight:600; color:var(--navy); cursor:pointer;}
   .opt-actions button:hover{border-color:var(--navy);}
   .opt-actions .pick{background:var(--blue); border-color:var(--blue); color:#fff;}
   .opt-actions .pick:hover{background:var(--blue-dark); border-color:var(--blue-dark);}
@@ -297,7 +297,9 @@
   .btn-ghost{border:1px solid var(--line); background:#fff; color:var(--navy); padding:11px 18px; border-radius:10px; font-size:14px; font-weight:600; cursor:pointer;}
   .btn-ghost:hover{border-color:var(--navy);}
   .wiz-foot .btn-primary:disabled{opacity:.4; cursor:not-allowed;}
-  @media (max-width: 980px){ .opt-grid{grid-template-columns:1fr;} .opt-preview{height:230px;} }
+  @media (max-width: 1280px){ .opt-grid{grid-template-columns:repeat(3, 1fr);} }
+  @media (max-width: 980px){ .opt-grid{grid-template-columns:repeat(2, 1fr);} }
+  @media (max-width: 620px){ .opt-grid{grid-template-columns:1fr;} .opt-preview{height:230px;} }
   .view-toolbar{position:absolute; top:16px; left:16px; display:flex; gap:4px; background:#fff; border:1px solid var(--line); border-radius:8px; padding:4px; z-index:5;}
   .view-toolbar button{background:none; border:none; padding:8px 14px; font-size:12px; font-weight:600; color:var(--muted); border-radius:6px;}
   .view-toolbar button.on{background:var(--navy); color:#fff;}
@@ -1012,8 +1014,15 @@ tabBom.addEventListener('click', () => { activeTab='bom'; renderRightPanel(); })
 let RAIL_W = 3.3, RAIL_ROWS_Y = [3.6, 1.5], CAB_Z = -0.72;
 let CAB = { opt:null, W:5, H:5, D:2.2, rows:2, perRow:9, total:18, railW:3.3 };
 const CAB_RULES = { side:55, top:55, bottom:55, rowGap:70, backZ:30, modH:143.7, modW:36 };   // mm – Annahmen für Verdrahtung/Abstände
+function cabCapacity(opt){
+  const sm = window.STEP_MODELS && window.STEP_MODELS[opt.model]; if(!sm) return null;
+  const [Wmm, Hmm] = sm.sizeMM, r = CAB_RULES;
+  const rows = Math.max(1, Math.floor((Hmm - r.top - r.bottom + r.rowGap) / (r.modH + r.rowGap)));
+  const perRow = Math.max(1, Math.floor((Wmm - 2*r.side) / r.modW + 1e-6));
+  return { rows, perRow, total: rows*perRow };
+}
 function setCabinetGeometry(optId){
-  const opt = cabinetOptions.find(o => o.id === optId) || cabinetOptions[1];
+  const opt = cabinetOptions.find(o => o.id === optId) || cabinetOptions.find(o => o.id === 'cab1050');
   const sm = window.STEP_MODELS && window.STEP_MODELS[opt.model];
   const [Wmm, Hmm, Dmm] = sm ? sm.sizeMM : [500, 504, 218];
   const r = CAB_RULES;
@@ -1853,11 +1862,16 @@ document.addEventListener('keydown', e => { if(e.key === 'Escape' && !document.g
 /* =========================================================
    PROJEKT-ASSISTENT — Frage 1: Hardware (Schaltschrankgröße)
 ========================================================= */
-const cabinetOptions = [
-  { id:'cab1034', model:'cab_1034', name:'Schaltschrank klein',  code:'1034.000', desc:'Kompakte Variante für wenige Module.' },
-  { id:'cab1050', model:'cab_1050', name:'Schaltschrank mittel', code:'1050.000', desc:'Ausgewogene Größe für typische Messaufgaben.' },
-  { id:'cab1059', model:'cab_1059', name:'Schaltschrank groß',   code:'1059.000', desc:'Viel Platz für umfangreiche Messsysteme.' },
-];
+const cabinetOptions = [   // nach Größe sortiert; Name aus Breite × Höhe × Tiefe (Nennmaß)
+  { id:'cab1033500', model:'cab_1033500', code:'1033.500', nw:300, nh:300, nd:210 },
+  { id:'cab1034',    model:'cab_1034',    code:'1034.000', nw:300, nh:400, nd:210 },
+  { id:'cab1380',    model:'cab_1380',    code:'1380.000', nw:380, nh:380, nd:210 },
+  { id:'cab1050',    model:'cab_1050',    code:'1050.000', nw:500, nh:500, nd:210 },
+  { id:'cab1350',    model:'cab_1350',    code:'1350.000', nw:500, nh:500, nd:300 },
+  { id:'cab1376',    model:'cab_1376',    code:'1376.000', nw:600, nh:760, nd:350 },
+  { id:'cab1059',    model:'cab_1059',    code:'1059.000', nw:600, nh:800, nd:400 },
+  { id:'cab1091',    model:'cab_1091',    code:'1091.000', nw:600, nh:1000, nd:400 },
+].map(o => ({ ...o, name:`Schaltschrank ${o.nw} × ${o.nh} × ${o.nd}` }));
 let projectDraft = { cabinet: null };
 let wizPrev = null;
 
@@ -1874,7 +1888,7 @@ function renderWizardCards(){
       <div class="opt-preview"><canvas data-prev="${o.id}"></canvas><span class="opt-badge">Typ ${o.code}</span><span class="opt-check">✓</span></div>
       <div class="opt-body">
         <h3>${o.name}</h3>
-        <p class="opt-desc">${o.desc}</p>
+        <p class="opt-desc">${(() => { const c = cabCapacity(o); return c ? `${c.total} Modulplätze (${c.rows} ${c.rows > 1 ? 'Reihen' : 'Reihe'} × ${c.perRow})` : ''; })()}</p>
         <dl class="opt-dims">
           <dt>Breite</dt><dd>${d ? d[0] + ' mm' : '–'}</dd>
           <dt>Höhe</dt><dd>${d ? d[1] + ' mm' : '–'}</dd>
@@ -1918,7 +1932,7 @@ function openCabinetInfo(o){
   document.getElementById('info-body').innerHTML = `
     <div class="info-sec"><h4>Beschreibung</h4><p>${PH}</p></div>
     <div class="info-sec"><h4>Abmessungen</h4><dl class="info-grid">
-      ${row('Breite', d && d[0] + ' mm')}${row('Höhe', d && d[1] + ' mm')}${row('Tiefe', d && d[2] + ' mm')}${row('Nutzbare Modulplätze')}
+      ${row('Breite', d && d[0] + ' mm')}${row('Höhe', d && d[1] + ' mm')}${row('Tiefe', d && d[2] + ' mm')}${row('Nutzbare Modulplätze', (() => { const c = cabCapacity(o); return c ? `${c.total} (${c.rows} ${c.rows > 1 ? 'Reihen' : 'Reihe'} × ${c.perRow})` : null; })())}
     </dl></div>
     <div class="info-sec"><h4>Technische Daten</h4><dl class="info-grid">
       ${row('Material')}${row('Schutzart')}${row('Montage')}${row('Gewicht')}${row('Preis')}
@@ -1971,7 +1985,7 @@ function wizardLoop(){
   wp.raf = requestAnimationFrame(wizardLoop);
   wp.items.forEach(it => {
     const cv = it.canvas; if(!cv || !cv.isConnected) return;
-    const rect = cv.getBoundingClientRect(); if(!rect.width) return;
+    const rect = cv.getBoundingClientRect(); if(!rect.width || rect.bottom < 0 || rect.top > window.innerHeight) return;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const W = Math.round(rect.width * dpr), H = Math.round(rect.height * dpr);
     if(cv.width !== W || cv.height !== H){ cv.width = W; cv.height = H; }
