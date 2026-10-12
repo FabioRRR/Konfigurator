@@ -343,6 +343,8 @@
   .viewer-foot .views button:hover{border-color:var(--navy);}
   .viewer-loading{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-family:var(--mono); font-size:12px; color:var(--muted);}
 
+  .toast{position:fixed; left:50%; bottom:28px; transform:translate(-50%,20px); background:var(--navy); color:#fff; padding:12px 18px; border-radius:10px; font-size:13px; box-shadow:0 12px 30px -10px rgba(0,0,0,.5); opacity:0; pointer-events:none; transition:.25s; z-index:220; max-width:min(560px, calc(100vw - 32px));}
+  .toast.show{opacity:1; transform:translate(-50%,0);}
   /* Modul-Informationen (Popup) */
   .info-overlay{position:fixed; inset:0; background:rgba(11,42,82,0.55); display:none; align-items:center; justify-content:center; z-index:190; padding:24px;}
   .info-overlay.show{display:flex;}
@@ -584,6 +586,17 @@
     </div>
   </div>
 </div>
+
+<div class="info-overlay" id="confirm-overlay" style="z-index:210;">
+  <div class="info-modal" style="max-width:420px;" role="alertdialog" aria-modal="true">
+    <div class="info-body" style="padding:22px 22px 8px;"><p id="confirm-msg" style="font-size:15px; color:var(--navy); margin:0;"></p></div>
+    <div class="info-foot" style="justify-content:flex-end; border-top:none;">
+      <button id="confirm-cancel">Abbrechen</button>
+      <button class="danger" id="confirm-ok">OK</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast" role="status"></div>
 
 <script>/*__STEP_MODELS__*/</script>
 <script>
@@ -971,9 +984,9 @@ function computeLayout(list){
 }
 function addModule(id){
   const m = MODULE_TYPES.find(x => x.id === id);
-  const full = () => alert('Alle Modulplätze sind belegt. Erhöhen Sie die Bin-Größe im Schritt „Bins / Einschübe“.');
+  const full = () => toast('Alle Modulplätze sind belegt. Erhöhen Sie die Bin-Größe im Schritt „Bins / Einschübe“.');
   if(placedModules.length >= TOTAL_SLOTS){ full(); return; }
-  if(m.unique && placedModules.some(pm => pm.id === id)){ alert(m.name + ' kann nur einmal pro Konfiguration verwendet werden.'); return; }
+  if(m.unique && placedModules.some(pm => pm.id === id)){ toast(m.name + ' kann nur einmal pro Konfiguration verwendet werden.'); return; }
   if(m.first){                       // steht immer ganz am Anfang (oberste Reihe, ganz links)
     placedModules.unshift({ id, row: 0 });
     // Überlauf der obersten Reihe nach unten schieben
@@ -1053,11 +1066,31 @@ function refreshSummary(){
 }
 function resetAllModules(){
   if(!placedModules.length) return;
-  if(!confirm(`Alle ${placedModules.length} Module aus der Konfiguration entfernen und neu beginnen?`)) return;
-  placedModules = [];
-  if(typeof closeModuleInfo === 'function') closeModuleInfo();
-  refreshAll();
+  askConfirm(`Alle ${placedModules.length} Module aus der Konfiguration entfernen und neu beginnen?`, 'Alle entfernen', () => {
+    placedModules = [];
+    closeModuleInfo();
+    refreshAll();
+  });
 }
+/* eigene Hinweise statt alert()/confirm() – native Dialoge werden in Vorschau-Fenstern oft blockiert */
+let toastTimer = null;
+function toast(msg){
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 4200);
+}
+let confirmCb = null;
+function askConfirm(msg, okLabel, cb){
+  document.getElementById('confirm-msg').textContent = msg;
+  document.getElementById('confirm-ok').textContent = okLabel;
+  confirmCb = cb;
+  document.getElementById('confirm-overlay').classList.add('show');
+}
+function closeConfirm(){ document.getElementById('confirm-overlay').classList.remove('show'); confirmCb = null; }
+document.getElementById('confirm-cancel').addEventListener('click', closeConfirm);
+document.getElementById('confirm-overlay').addEventListener('click', e => { if(e.target.id === 'confirm-overlay') closeConfirm(); });
+document.getElementById('confirm-ok').addEventListener('click', () => { const cb = confirmCb; closeConfirm(); if(cb) cb(); });
+document.addEventListener('keydown', e => { if(e.key === 'Escape') closeConfirm(); });
 document.getElementById('reset-all').addEventListener('click', resetAllModules);
 function refreshAll(){ renderRightPanel(); refreshSummary(); if(sceneInited) rebuildModulesIn3D(); }
 
