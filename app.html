@@ -263,6 +263,41 @@
   /* viewport */
   .viewport-wrap{position:relative; background:linear-gradient(180deg,#EEF1F5 0%, #E4E9EF 100%); min-width:0;}
   #canvas-host{position:absolute; inset:0;}
+  /* ---- Projekt-Assistent ---- */
+  #view-wizard.active{display:flex !important; flex-direction:column; min-height:100vh; background:#F5F7FA;}
+  .wiz-main{flex:1; width:100%; max-width:1180px; margin:0 auto; padding:34px 32px 20px;}
+  .wiz-steps{display:flex; align-items:center; gap:10px; font-family:var(--mono); font-size:11px; color:var(--muted-2); letter-spacing:.06em; text-transform:uppercase; margin-bottom:14px;}
+  .wiz-steps .dot{width:22px; height:22px; border-radius:50%; background:var(--blue); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700;}
+  .wiz-steps b{color:var(--navy);}
+  .wiz-main h1{margin:0 0 6px; font-size:28px; color:var(--navy); letter-spacing:-.01em;}
+  .wiz-main .wiz-sub{margin:0 0 26px; color:var(--muted); font-size:15px; max-width:680px;}
+  .opt-grid{display:grid; grid-template-columns:repeat(3, 1fr); gap:20px;}
+  .opt-card{background:#fff; border:2px solid var(--line); border-radius:16px; overflow:hidden; display:flex; flex-direction:column; cursor:pointer; transition:border-color .15s, box-shadow .15s, transform .15s; position:relative;}
+  .opt-card:hover{border-color:#B9C8E3; box-shadow:0 14px 30px -18px rgba(11,42,82,.45);}
+  .opt-card.selected{border-color:var(--blue); box-shadow:0 0 0 4px rgba(27,95,214,.14), 0 14px 30px -18px rgba(11,42,82,.45);}
+  .opt-preview{height:270px; background:linear-gradient(180deg,#F1F4F8 0%,#E1E7EE 100%); position:relative;}
+  .opt-preview canvas{width:100%; height:100%; display:block;}
+  .opt-badge{position:absolute; top:12px; left:12px; font-family:var(--mono); font-size:10.5px; font-weight:600; background:#fff; color:var(--navy); border:1px solid var(--line); border-radius:6px; padding:4px 8px;}
+  .opt-check{position:absolute; top:12px; right:12px; width:26px; height:26px; border-radius:50%; border:2px solid #C6D0DE; background:#fff; display:flex; align-items:center; justify-content:center; color:#fff; font-size:14px;}
+  .opt-card.selected .opt-check{background:var(--blue); border-color:var(--blue);}
+  .opt-body{padding:18px 20px 8px; flex:1;}
+  .opt-body h3{margin:0 0 4px; font-size:18px; color:var(--navy);}
+  .opt-body .opt-desc{margin:0 0 12px; font-size:13px; color:var(--muted);}
+  .opt-dims{display:grid; grid-template-columns:auto 1fr; gap:4px 14px; font-size:13px; margin:0;}
+  .opt-dims dt{color:var(--muted);} .opt-dims dd{margin:0; color:var(--navy); font-family:var(--mono); font-size:12.5px;}
+  .opt-actions{display:flex; gap:8px; padding:12px 20px 18px;}
+  .opt-actions button{flex:1; border:1px solid var(--line); background:#fff; border-radius:9px; padding:9px 10px; font-size:13px; font-weight:600; color:var(--navy); cursor:pointer;}
+  .opt-actions button:hover{border-color:var(--navy);}
+  .opt-actions .pick{background:var(--blue); border-color:var(--blue); color:#fff;}
+  .opt-actions .pick:hover{background:var(--blue-dark); border-color:var(--blue-dark);}
+  .opt-card.selected .opt-actions .pick{background:#1FA463; border-color:#1FA463;}
+  .wiz-foot{position:sticky; bottom:0; background:rgba(245,247,250,.92); backdrop-filter:blur(6px); border-top:1px solid var(--line); padding:14px 32px; display:flex; justify-content:space-between; align-items:center; gap:12px;}
+  .wiz-foot .hint{font-size:13px; color:var(--muted);}
+  .wiz-foot .grp{display:flex; gap:10px; align-items:center;}
+  .btn-ghost{border:1px solid var(--line); background:#fff; color:var(--navy); padding:11px 18px; border-radius:10px; font-size:14px; font-weight:600; cursor:pointer;}
+  .btn-ghost:hover{border-color:var(--navy);}
+  .wiz-foot .btn-primary:disabled{opacity:.4; cursor:not-allowed;}
+  @media (max-width: 980px){ .opt-grid{grid-template-columns:1fr;} .opt-preview{height:230px;} }
   .view-toolbar{position:absolute; top:16px; left:16px; display:flex; gap:4px; background:#fff; border:1px solid var(--line); border-radius:8px; padding:4px; z-index:5;}
   .view-toolbar button{background:none; border:none; padding:8px 14px; font-size:12px; font-weight:600; color:var(--muted); border-radius:6px;}
   .view-toolbar button.on{background:var(--navy); color:#fff;}
@@ -429,7 +464,7 @@
         <div class="hero-left">
           <h1>Projektkonfigurator</h1>
           <p>Erstellen Sie maßgeschneiderte Messtechnik-Lösungen für Ihre Anwendung – modular, flexibel und präzise.</p>
-          <button class="btn-primary"><span class="plus-circle">+</span>Neues Projekt anlegen</button>
+          <button class="btn-primary" id="btn-new-project" onclick="showView('wizard')"><span class="plus-circle">+</span>Neues Projekt anlegen</button>
         </div>
         <div class="stats-card">
           <div class="stat">
@@ -473,6 +508,31 @@
 <!-- =========================================================
      VIEW 2 — 3D CONFIGURATOR
 ========================================================= -->
+<div id="view-wizard" class="view">
+  <header class="cfg-topbar">
+    <div class="cfg-left">
+      <div class="cfg-logo" onclick="showView('dashboard')">
+        <div class="g">Gantner</div>
+        <div class="sub">instruments</div>
+      </div>
+      <div class="crumb">
+        <a href="#" onclick="showView('dashboard'); return false;">Projekte</a><span class="sep">/</span>
+        <b>Neues Projekt</b>
+      </div>
+    </div>
+  </header>
+  <main class="wiz-main">
+    <div class="wiz-steps"><span class="dot">1</span><b>Frage 1</b><span>· Hardware</span></div>
+    <h1>Welche Hardware möchten Sie verwenden?</h1>
+    <p class="wiz-sub">Wählen Sie die Schaltschrankgröße für Ihr Projekt. Sie sehen jede Variante in 3D und können vorab weitere Informationen zur Hardware öffnen.</p>
+    <div class="opt-grid" id="opt-grid"></div>
+  </main>
+  <div class="wiz-foot">
+    <button class="btn-ghost" onclick="showView('dashboard')">← Zurück zum Dashboard</button>
+    <div class="grp"><span class="hint" id="wiz-hint">Bitte eine Hardware auswählen</span><button class="btn-primary" id="wiz-next" disabled>Weiter →</button></div>
+  </div>
+</div>
+
 <div id="view-configurator" class="view">
   <header class="cfg-topbar">
     <div class="cfg-left">
@@ -582,7 +642,7 @@
     <div class="info-body" id="info-body"></div>
     <div class="info-foot">
       <button class="danger" id="info-delete">Modul löschen</button>
-      <div class="grp"><button id="info-view">3D ansehen</button><button id="info-ok">Schließen</button></div>
+      <div class="grp"><button id="info-view">3D ansehen</button><button id="info-select" class="btn-primary" style="display:none; padding:8px 14px; font-size:13px;">Diese Hardware wählen</button><button id="info-ok">Schließen</button></div>
     </div>
   </div>
 </div>
@@ -606,6 +666,8 @@
 function showView(name, enclosureType){
   document.getElementById('view-dashboard').classList.toggle('active', name === 'dashboard');
   document.getElementById('view-configurator').classList.toggle('active', name === 'configurator');
+  document.getElementById('view-wizard').classList.toggle('active', name === 'wizard');
+  if(name === 'wizard'){ window.scrollTo(0,0); startWizard(); } else { stopWizardPreviews(); }
   if(name === 'configurator'){
     openEnclosure(enclosureType || 'cabinet');
     requestAnimationFrame(() => { initSceneIfNeeded(); onResize(); });
@@ -1633,6 +1695,7 @@ function stepMaterial(rgb){
   const k = rgb.join(',');
   const base = { roughness:0.55, metalness:0.15, flatShading:true, side:THREE.DoubleSide };
   const table = {
+    '178,184,191': { color:0xAEB8C4, roughness:0.5, metalness:0.2 },   // Schaltschrank (Lack hellgrau)
     '134,134,134': { color:0xDCE1E7, roughness:0.34, metalness:0.2 },   // Aluminium-Gehäuse
     '52,52,52':    { color:0x2B3037, roughness:0.6,  metalness:0.1 },    // Kunststoff-Sockel
     '0,8,116':     { color:0x1B5FD6, roughness:0.45, metalness:0.05 },   // blaue Klemmenblöcke
@@ -1719,6 +1782,9 @@ function viewerLoop(){
 }
 function openModuleViewer(typeId){
   const mt = MODULE_TYPES.find(x => x.id === typeId); if(!mt || !mt.stepModel) return;
+  openModelViewer(mt);
+}
+function openModelViewer(mt){
   const overlay = document.getElementById('viewer-overlay');
   overlay.classList.add('show');
   document.getElementById('viewer-title').textContent = mt.name;
@@ -1735,7 +1801,7 @@ function openModuleViewer(typeId){
     v.center.set(0,0,0);
     v.dist = Math.max(wU, hU, dU) * 2.6;
     document.getElementById('viewer-sub').textContent =
-      `${mt.article ? 'Art.-Nr. ' + mt.article + ' · ' : ''}B × H × T: ${model.sizeMM.map(s => s.toFixed(1)).join(' × ')} mm`;
+      `${mt.subLabel ? mt.subLabel + ' · ' : (mt.article ? 'Art.-Nr. ' + mt.article + ' · ' : '')}B × H × T: ${model.sizeMM.map(s => s.toFixed(1)).join(' × ')} mm`;
     loading.style.display = 'none';
     viewerSize(); setViewerAngle('iso');
     v.controls.minDistance = v.dist * 0.35; v.controls.maxDistance = v.dist * 2.2;
@@ -1743,10 +1809,12 @@ function openModuleViewer(typeId){
   }, 30);
 }
 /* ---------- Modul-Informationen (Popup) ---------- */
-let infoPm = null;
+let infoPm = null, infoViewFn = null, infoSelectFn = null;
 function openModuleInfo(pm){
   const m = typeOf(pm); if(!m) return;
-  infoPm = pm;
+  infoPm = pm; infoViewFn = () => openModuleViewer(pm.id); infoSelectFn = null;
+  document.getElementById('info-delete').style.display = '';
+  document.getElementById('info-select').style.display = 'none';
   const idx = placedModules.indexOf(pm);
   const sm = m.stepModel && window.STEP_MODELS && window.STEP_MODELS[m.stepModel];
   const dims = sm ? `${sm.sizeMM[0].toFixed(1)} × ${sm.sizeMM[1].toFixed(1)} × ${sm.sizeMM[2].toFixed(1)} mm (B × H × T)` : null;
@@ -1769,17 +1837,159 @@ function openModuleInfo(pm){
   document.getElementById('info-view').style.display = sm ? '' : 'none';
   document.getElementById('info-overlay').classList.add('show');
 }
-function closeModuleInfo(){ document.getElementById('info-overlay').classList.remove('show'); infoPm = null; }
+function closeModuleInfo(){ document.getElementById('info-overlay').classList.remove('show'); infoPm = null; infoViewFn = null; infoSelectFn = null; }
 document.getElementById('info-close').addEventListener('click', closeModuleInfo);
 document.getElementById('info-ok').addEventListener('click', closeModuleInfo);
 document.getElementById('info-overlay').addEventListener('click', e => { if(e.target.id === 'info-overlay') closeModuleInfo(); });
+document.getElementById('info-select').addEventListener('click', () => { if(infoSelectFn) infoSelectFn(); });
 document.getElementById('info-delete').addEventListener('click', () => {
   if(!infoPm) return;
   const i = placedModules.indexOf(infoPm); closeModuleInfo();
   if(i >= 0) removeModule(i);
 });
-document.getElementById('info-view').addEventListener('click', () => { if(infoPm) openModuleViewer(infoPm.id); });
+document.getElementById('info-view').addEventListener('click', () => { if(infoViewFn) infoViewFn(); });
 document.addEventListener('keydown', e => { if(e.key === 'Escape' && !document.getElementById('viewer-overlay').classList.contains('show')) closeModuleInfo(); });
+
+/* =========================================================
+   PROJEKT-ASSISTENT — Frage 1: Hardware (Schaltschrankgröße)
+========================================================= */
+const cabinetOptions = [
+  { id:'cab1034', model:'cab_1034', name:'Schaltschrank klein',  code:'1034.000', desc:'Kompakte Variante für wenige Module.' },
+  { id:'cab1050', model:'cab_1050', name:'Schaltschrank mittel', code:'1050.000', desc:'Ausgewogene Größe für typische Messaufgaben.' },
+  { id:'cab1059', model:'cab_1059', name:'Schaltschrank groß',   code:'1059.000', desc:'Viel Platz für umfangreiche Messsysteme.' },
+];
+let projectDraft = { cabinet: null };
+let wizPrev = null;
+
+function optDims(o){
+  const sm = window.STEP_MODELS && window.STEP_MODELS[o.model];
+  return sm ? sm.sizeMM.map(v => Math.round(v)) : null;
+}
+function renderWizardCards(){
+  const grid = document.getElementById('opt-grid');
+  grid.innerHTML = cabinetOptions.map(o => {
+    const d = optDims(o);
+    return `
+    <div class="opt-card${projectDraft.cabinet === o.id ? ' selected' : ''}" data-id="${o.id}">
+      <div class="opt-preview"><canvas data-prev="${o.id}"></canvas><span class="opt-badge">Typ ${o.code}</span><span class="opt-check">✓</span></div>
+      <div class="opt-body">
+        <h3>${o.name}</h3>
+        <p class="opt-desc">${o.desc}</p>
+        <dl class="opt-dims">
+          <dt>Breite</dt><dd>${d ? d[0] + ' mm' : '–'}</dd>
+          <dt>Höhe</dt><dd>${d ? d[1] + ' mm' : '–'}</dd>
+          <dt>Tiefe</dt><dd>${d ? d[2] + ' mm' : '–'}</dd>
+        </dl>
+      </div>
+      <div class="opt-actions"><button data-act="info">Mehr Informationen</button><button class="pick" data-act="pick">${projectDraft.cabinet === o.id ? '✓ Ausgewählt' : 'Auswählen'}</button></div>
+    </div>`;
+  }).join('');
+  grid.querySelectorAll('.opt-card').forEach(card => {
+    const o = cabinetOptions.find(x => x.id === card.dataset.id);
+    card.addEventListener('click', e => {
+      const act = e.target.closest('button') && e.target.closest('button').dataset.act;
+      if(act === 'info') openCabinetInfo(o); else selectCabinet(o.id);
+    });
+  });
+  const next = document.getElementById('wiz-next'), hint = document.getElementById('wiz-hint');
+  const sel = cabinetOptions.find(x => x.id === projectDraft.cabinet);
+  next.disabled = !sel;
+  hint.textContent = sel ? `Ausgewählt: ${sel.name} (Typ ${sel.code})` : 'Bitte eine Hardware auswählen';
+  if(wizPrev) attachWizardCanvases();
+}
+function selectCabinet(id){ projectDraft.cabinet = id; renderWizardCards(); }
+document.getElementById('wiz-next').addEventListener('click', () => {
+  const sel = cabinetOptions.find(x => x.id === projectDraft.cabinet); if(!sel) return;
+  toast(`Hardware gespeichert: ${sel.name} (Typ ${sel.code}). Weitere Fragen folgen.`);
+});
+
+function openCabinetInfo(o){
+  const d = optDims(o);
+  const PH = '<span class="ph">Platzhalter – Information folgt</span>';
+  infoPm = null; infoViewFn = () => openModelViewer({ stepModel:o.model, name:o.name, subLabel:'Typ ' + o.code });
+  infoSelectFn = () => { selectCabinet(o.id); closeModuleInfo(); };
+  document.getElementById('info-delete').style.display = 'none';
+  document.getElementById('info-select').style.display = '';
+  document.getElementById('info-view').style.display = '';
+  document.getElementById('info-swatch').style.background = '#C9D1DB';
+  document.getElementById('info-title').textContent = o.name;
+  document.getElementById('info-sub').textContent = 'Typ ' + o.code;
+  const row = (k, v) => `<dt>${k}</dt><dd>${v || PH}</dd>`;
+  document.getElementById('info-body').innerHTML = `
+    <div class="info-sec"><h4>Beschreibung</h4><p>${PH}</p></div>
+    <div class="info-sec"><h4>Abmessungen</h4><dl class="info-grid">
+      ${row('Breite', d && d[0] + ' mm')}${row('Höhe', d && d[1] + ' mm')}${row('Tiefe', d && d[2] + ' mm')}${row('Nutzbare Modulplätze')}
+    </dl></div>
+    <div class="info-sec"><h4>Technische Daten</h4><dl class="info-grid">
+      ${row('Material')}${row('Schutzart')}${row('Montage')}${row('Gewicht')}${row('Preis')}
+    </dl></div>
+    <div class="info-sec"><h4>Dokumente</h4><p>${PH}</p></div>`;
+  document.getElementById('info-overlay').classList.add('show');
+}
+
+/* drehbare 3D-Vorschauen: ein gemeinsamer Renderer, Bild wird in die Karten-Canvases kopiert */
+function initWizardPreviews(){
+  if(wizPrev) return wizPrev;
+  const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true, preserveDrawingBuffer:true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  const items = cabinetOptions.map(o => {
+    const scene = new THREE.Scene();
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x9AA6B6, 0.55));
+    const key = new THREE.DirectionalLight(0xffffff, 0.6); key.position.set(4, 7, 6); scene.add(key);
+    const fill = new THREE.DirectionalLight(0xffffff, 0.35); fill.position.set(-5, 2, -3); scene.add(fill);
+    const holder = new THREE.Group();
+    const g = makeStepGroup(o.model, false);
+    let dist = 10;
+    if(g){
+      const m = loadStepModel(o.model);
+      const w = m.sizeMM[0]*MM_TO_UNIT, h = m.sizeMM[1]*MM_TO_UNIT, dp = m.sizeMM[2]*MM_TO_UNIT;
+      g.position.set(0, -h/2, -dp/2);
+      holder.add(g);
+      dist = Math.max(w, h, dp) * 2.5;
+    }
+    scene.add(holder);
+    const cam = new THREE.PerspectiveCamera(32, 1.4, 0.1, 200);
+    return { o, scene, holder, cam, dist, angle: 0.6 + Math.random()*0.4, hover:false };
+  });
+  wizPrev = { renderer, items, running:false, raf:0 };
+  return wizPrev;
+}
+function attachWizardCanvases(){
+  if(!wizPrev) return;
+  wizPrev.items.forEach(it => {
+    it.canvas = document.querySelector(`canvas[data-prev="${it.o.id}"]`);
+    if(it.canvas && !it.canvas._hoverBound){
+      const card = it.canvas.closest('.opt-card');
+      card.addEventListener('mouseenter', () => it.hover = true);
+      card.addEventListener('mouseleave', () => it.hover = false);
+      it.canvas._hoverBound = true;
+    }
+  });
+}
+function wizardLoop(){
+  const wp = wizPrev; if(!wp || !wp.running) return;
+  wp.raf = requestAnimationFrame(wizardLoop);
+  wp.items.forEach(it => {
+    const cv = it.canvas; if(!cv || !cv.isConnected) return;
+    const rect = cv.getBoundingClientRect(); if(!rect.width) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const W = Math.round(rect.width * dpr), H = Math.round(rect.height * dpr);
+    if(cv.width !== W || cv.height !== H){ cv.width = W; cv.height = H; }
+    if(wp.renderer.domElement.width !== W || wp.renderer.domElement.height !== H) wp.renderer.setSize(W / dpr, H / dpr, false), wp.renderer.setPixelRatio(dpr);
+    it.angle += it.hover ? 0.014 : 0.004;
+    it.cam.aspect = W / H; it.cam.updateProjectionMatrix();
+    it.cam.position.set(Math.sin(it.angle) * it.dist, it.dist * 0.42, Math.cos(it.angle) * it.dist);
+    it.cam.lookAt(0, 0, 0);
+    wp.renderer.render(it.scene, it.cam);
+    const c2 = cv.getContext('2d'); c2.clearRect(0, 0, W, H); c2.drawImage(wp.renderer.domElement, 0, 0, W, H);
+  });
+}
+function startWizard(){
+  renderWizardCards();
+  initWizardPreviews(); attachWizardCanvases();
+  if(!wizPrev.running){ wizPrev.running = true; wizardLoop(); }
+}
+function stopWizardPreviews(){ if(wizPrev){ wizPrev.running = false; cancelAnimationFrame(wizPrev.raf); } }
 
 function closeModuleViewer(){
   document.getElementById('viewer-overlay').classList.remove('show');
