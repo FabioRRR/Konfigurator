@@ -716,13 +716,13 @@ const enclosureConfigs = {
     projectSuffix: 'Prüfstand Bremssystem — Schaltschrank',
     ipLabel: 'IP66',
     dimsLabel: '400×500×210 mm',
-    totalSlots: 12,
+    totalSlots: 18,
     weightBase: 4.6, weightPerModule: 0.5,
-    powerPerModule: 4.8, powerMax: 60,
+    powerPerModule: 4.8, powerMax: 100,
     priceFixedItems: [ {label:'Schaltschränke & Montage', value:1450}, {label:'Engineering', value:600} ],
     stepsMeta: {
       gehaeuse: 'Schaltschrank IP66, Baugröße M, Wandmontage.',
-      bins: '2 DIN-Schienenreihen, 6 Modulplätze je Reihe — 12 Plätze gesamt.',
+      bins: '2 DIN-Schienenreihen, 9 Modulplätze je Reihe — 18 Plätze gesamt.',
     },
     moduleTypes: [
       { id:'qs', name:'Q.station X', article:'561828', stepModel:'qs', first:true, unique:true, desc:'Controller & Edge-Verarbeitung – steht immer am Anfang der Modulreihe, nur einmal pro Konfiguration', color:'#0B2A52', price:1450 },
@@ -932,7 +932,7 @@ const RAIL_W = 3.3, RAIL_ROWS_Y = [3.6, 1.5], CAB_Z = -0.72;
 function typeOf(pm){ return MODULE_TYPES.find(x => x.id === pm.id); }
 function modWidth(m){
   const sm = m.stepModel && window.STEP_MODELS && window.STEP_MODELS[m.stepModel];
-  return sm ? sm.sizeMM[0] * 0.01 : 0.5;
+  return sm ? sm.sizeMM[0] * 0.01 : 0.36;
 }
 function rowUsed(r, exclude){
   return placedModules.reduce((s, pm) => (pm !== exclude && (pm.row||0) === r) ? s + modWidth(typeOf(pm)) : s, 0);
@@ -1391,7 +1391,7 @@ function getSlotPositions(type){
 /* ---------- Modul-Meshes: Schaltschrank (DIN-Box) vs. raxx (Fronteinschub mit Details) ---------- */
 function buildCabinetModuleMesh(m, p, placedIndex){
   const mat = new THREE.MeshStandardMaterial({ color: new THREE.Color(m.color), roughness:0.35, metalness:0.35 });
-  const geo = new THREE.BoxGeometry(0.5, 1.85, 0.44);
+  const geo = new THREE.BoxGeometry(0.36, 1.44, 0.44);
   const mesh = new THREE.Mesh(geo, mat);
   mesh.position.set(p.x, p.y, p.z);
   mesh.castShadow = true;
@@ -1400,10 +1400,10 @@ function buildCabinetModuleMesh(m, p, placedIndex){
   group.userData = { placedIndex, isModule:true };
   group.add(mesh);
   const label = new THREE.Mesh(
-    new THREE.BoxGeometry(0.4, 0.14, 0.02),
+    new THREE.BoxGeometry(0.28, 0.14, 0.02),
     new THREE.MeshStandardMaterial({ color:0xffffff, roughness:0.6 })
   );
-  label.position.set(p.x, p.y + 0.7, p.z + 0.23);
+  label.position.set(p.x, p.y + 0.5, p.z + 0.23);
   group.add(label);
   return group;
 }
