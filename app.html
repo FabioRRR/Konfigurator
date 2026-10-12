@@ -1747,7 +1747,10 @@ function initModuleDrag(){
     if(e.button !== 0) return;
     const pm = pickModule(e);
     if(!pm) return;
-    if(typeOf(pm).first) return;                       // Station ist fixiert (Klick = entfernen bleibt)
+    if(typeOf(pm).first){                              // Station ist fixiert: nur Klick = entfernen, Ziehen dreht die Ansicht
+      drag = { pm, sx: e.clientX, sy: e.clientY, active: false, fixed: true };
+      return;
+    }
     controls.enabled = false;
     drag = { pm, sx: e.clientX, sy: e.clientY, active: false };
   }, true);
@@ -1755,6 +1758,7 @@ function initModuleDrag(){
     if(!drag) return;
     if(!drag.active){
       if(Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 6) return;
+      if(drag.fixed){ drag = null; return; }
       drag.active = true; el.style.cursor = 'grabbing';
       const lp = computeLayout(placedModules).get(drag.pm);
       const pt = planePoint(e, lp.z);
