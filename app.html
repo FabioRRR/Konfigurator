@@ -339,6 +339,30 @@
   .viewer-foot .views button{border:1px solid var(--line); background:#fff; padding:6px 12px; border-radius:7px; font-size:12px; font-weight:600; color:var(--navy);}
   .viewer-foot .views button:hover{border-color:var(--navy);}
   .viewer-loading{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-family:var(--mono); font-size:12px; color:var(--muted);}
+
+  /* Modul-Informationen (Popup) */
+  .info-overlay{position:fixed; inset:0; background:rgba(11,42,82,0.55); display:none; align-items:center; justify-content:center; z-index:190; padding:24px;}
+  .info-overlay.show{display:flex;}
+  .info-modal{background:#fff; width:100%; max-width:560px; max-height:calc(100vh - 48px); display:flex; flex-direction:column; border-radius:14px; overflow:hidden; box-shadow:0 30px 80px -20px rgba(0,0,0,.5);}
+  .info-head{display:flex; align-items:center; gap:14px; padding:18px 20px; border-bottom:1px solid var(--line);}
+  .info-head .module-swatch{width:40px; height:40px; border-radius:9px; flex:none;}
+  .info-head > div{flex:1;}
+  .info-head b{font-size:17px; color:var(--navy); display:block;}
+  .info-head span{font-family:var(--mono); font-size:11px; color:var(--muted);}
+  .info-body{padding:6px 20px 14px; overflow:auto;}
+  .info-sec{padding:12px 0; border-bottom:1px solid var(--line);}
+  .info-sec:last-child{border-bottom:none;}
+  .info-sec h4{margin:0 0 6px; font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted-2); font-family:var(--mono); font-weight:600;}
+  .info-sec p{margin:0; font-size:13px; color:var(--navy);}
+  .info-sec .ph{color:var(--muted-2); font-style:italic;}
+  .info-grid{display:grid; grid-template-columns:150px 1fr; gap:6px 14px; font-size:13px;}
+  .info-grid dt{color:var(--muted);} .info-grid dd{margin:0; color:var(--navy);}
+  .info-foot{display:flex; justify-content:space-between; align-items:center; gap:10px; padding:14px 20px; border-top:1px solid var(--line);}
+  .info-foot .grp{display:flex; gap:8px;}
+  .info-foot button{border:1px solid var(--line); background:#fff; padding:8px 14px; border-radius:8px; font-size:13px; font-weight:600; color:var(--navy); cursor:pointer;}
+  .info-foot button:hover{border-color:var(--navy);}
+  .info-foot .danger{color:#C0392B; border-color:#F0C9C4;}
+  .info-foot .danger:hover{background:#FDF1EF; border-color:#C0392B;}
 </style>
 </head>
 <body>
@@ -495,7 +519,7 @@
         <button id="tool-fullscreen" title="Vollbild"><svg class="icon" viewBox="0 0 24 24"><path d="M4 9V5a1 1 0 011-1h4M20 9V5a1 1 0 00-1-1h-4M4 15v4a1 1 0 001 1h4M20 15v4a1 1 0 01-1 1h-4"/></svg></button>
         <button id="tool-iso" title="Isometrisch"><svg class="icon" viewBox="0 0 24 24"><path d="M12 2l9 5v10l-9 5-9-5V7z"/><path d="M3 7l9 5 9-5M12 12v10"/></svg></button>
       </div>
-      <div class="viewport-hint">ZIEHEN: DREHEN · MODUL ZIEHEN: UMORDNEN · SCROLLEN: ZOOM</div>
+      <div class="viewport-hint">ZIEHEN: DREHEN · MODUL: KLICK = INFO · ZIEHEN = UMORDNEN · SCROLLEN: ZOOM</div>
     </div>
 
     <div class="right-panel">
@@ -534,6 +558,22 @@
       <div class="views">
         <button data-vv="front">Front</button><button data-vv="iso">Iso</button><button data-vv="side">Seite</button><button data-vv="rail">Rückseite</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modul-Informationen -->
+<div class="info-overlay" id="info-overlay">
+  <div class="info-modal" role="dialog" aria-modal="true" aria-labelledby="info-title">
+    <div class="info-head">
+      <div class="module-swatch" id="info-swatch"></div>
+      <div><b id="info-title">Modul</b><span id="info-sub"></span></div>
+      <button class="viewer-close" id="info-close" aria-label="Schließen">✕</button>
+    </div>
+    <div class="info-body" id="info-body"></div>
+    <div class="info-foot">
+      <button class="danger" id="info-delete">Modul löschen</button>
+      <div class="grp"><button id="info-view">3D ansehen</button><button id="info-ok">Schließen</button></div>
     </div>
   </div>
 </div>
@@ -869,6 +909,7 @@ function renderRightPanel(){
           </div>
         `;
       }).join('');
+      rpBody.querySelectorAll('.bom-name').forEach((el, i) => { el.style.cursor = 'pointer'; el.addEventListener('click', () => openModuleInfo(placedModules[i])); });
       rpBody.querySelectorAll('.bom-remove').forEach(btn => btn.addEventListener('click', () => removeModule(parseInt(btn.dataset.idx))));
       rpBody.querySelectorAll('.bom-view').forEach(btn => btn.addEventListener('click', () => openModuleViewer(btn.dataset.view)));
       let dragFrom = -1;
@@ -1650,6 +1691,45 @@ function openModuleViewer(typeId){
     if(!v.running){ v.running = true; viewerLoop(); }
   }, 30);
 }
+/* ---------- Modul-Informationen (Popup) ---------- */
+let infoPm = null;
+function openModuleInfo(pm){
+  const m = typeOf(pm); if(!m) return;
+  infoPm = pm;
+  const idx = placedModules.indexOf(pm);
+  const sm = m.stepModel && window.STEP_MODELS && window.STEP_MODELS[m.stepModel];
+  const dims = sm ? `${sm.sizeMM[0].toFixed(1)} × ${sm.sizeMM[1].toFixed(1)} × ${sm.sizeMM[2].toFixed(1)} mm (B × H × T)` : null;
+  const PH = '<span class="ph">Platzhalter – Information folgt</span>';
+  document.getElementById('info-swatch').style.background = m.color;
+  document.getElementById('info-title').textContent = m.name;
+  document.getElementById('info-sub').textContent = (m.article ? 'Art.-Nr. ' + m.article : 'Best.-Nr. GI-' + m.id.toUpperCase() + '-X')
+    + ' · ' + (currentEnclosure === 'cabinet' ? 'Schiene ' + ((pm.row||0)+1) + ' · ' : '') + 'Pos. ' + (idx + 1);
+  const row = (k, v) => `<dt>${k}</dt><dd>${v || PH}</dd>`;
+  document.getElementById('info-body').innerHTML = `
+    <div class="info-sec"><h4>Beschreibung</h4><p>${PH}</p></div>
+    <div class="info-sec"><h4>Technische Daten</h4><dl class="info-grid">
+      ${row('Kanäle / Eingänge')}${row('Messbereich')}${row('Abtastrate')}${row('Genauigkeit')}${row('Schnittstelle')}
+    </dl></div>
+    <div class="info-sec"><h4>Anschlüsse</h4><p>${PH}</p></div>
+    <div class="info-sec"><h4>Mechanik &amp; Umgebung</h4><dl class="info-grid">
+      ${row('Abmessungen', dims)}${row('Gewicht')}${row('Schutzart')}${row('Betriebstemperatur')}${row('Spannungsversorgung')}
+    </dl></div>
+    <div class="info-sec"><h4>Dokumente</h4><p>${PH}</p></div>`;
+  document.getElementById('info-view').style.display = sm ? '' : 'none';
+  document.getElementById('info-overlay').classList.add('show');
+}
+function closeModuleInfo(){ document.getElementById('info-overlay').classList.remove('show'); infoPm = null; }
+document.getElementById('info-close').addEventListener('click', closeModuleInfo);
+document.getElementById('info-ok').addEventListener('click', closeModuleInfo);
+document.getElementById('info-overlay').addEventListener('click', e => { if(e.target.id === 'info-overlay') closeModuleInfo(); });
+document.getElementById('info-delete').addEventListener('click', () => {
+  if(!infoPm) return;
+  const i = placedModules.indexOf(infoPm); closeModuleInfo();
+  if(i >= 0) removeModule(i);
+});
+document.getElementById('info-view').addEventListener('click', () => { if(infoPm) openModuleViewer(infoPm.id); });
+document.addEventListener('keydown', e => { if(e.key === 'Escape' && !document.getElementById('viewer-overlay').classList.contains('show')) closeModuleInfo(); });
+
 function closeModuleViewer(){
   document.getElementById('viewer-overlay').classList.remove('show');
   if(viewer) viewer.running = false;
@@ -1776,7 +1856,7 @@ function initModuleDrag(){
     const d = drag; drag = null;
     controls.enabled = true; el.style.cursor = '';
     if(d.active){ refreshAll(); }
-    else if(e.type === 'pointerup'){ const i = placedModules.indexOf(d.pm); if(i >= 0) removeModule(i); }
+    else if(e.type === 'pointerup'){ openModuleInfo(d.pm); }
   };
   window.addEventListener('pointerup', end);
   window.addEventListener('pointercancel', end);
