@@ -886,7 +886,7 @@ tabModules.addEventListener('click', () => { activeTab='modules'; renderRightPan
 tabBom.addEventListener('click', () => { activeTab='bom'; renderRightPanel(); });
 
 /* ---------- Layout: Module sitzen lückenlos aneinander ---------- */
-const RAIL_W = 3.3, RAIL_ROWS_Y = [1.5, 3.6], CAB_Z = -0.72;
+const RAIL_W = 3.3, RAIL_ROWS_Y = [3.6, 1.5], CAB_Z = -0.72;
 function typeOf(pm){ return MODULE_TYPES.find(x => x.id === pm.id); }
 function modWidth(m){
   const sm = m.stepModel && window.STEP_MODELS && window.STEP_MODELS[m.stepModel];
@@ -1702,7 +1702,7 @@ function retarget(pm, cx, cy){
   const others = placedModules.filter(q => q !== pm);
   let at;
   if(currentEnclosure === 'cabinet'){
-    let row = cy < (RAIL_ROWS_Y[0] + RAIL_ROWS_Y[1]) / 2 ? 0 : 1;
+    let row = cy > (RAIL_ROWS_Y[0] + RAIL_ROWS_Y[1]) / 2 ? 0 : 1;
     if(rowUsed(row, pm) + modWidth(typeOf(pm)) > RAIL_W + 1e-6) row = pm.row || 0;
     const lay = computeLayout(others);
     const inRow = others.filter(q => (q.row||0) === row);
