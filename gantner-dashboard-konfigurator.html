@@ -433,6 +433,8 @@
   .info-foot .grp{display:flex; gap:8px;}
   .info-foot button{border:1px solid var(--line); background:#fff; padding:8px 14px; border-radius:8px; font-size:13px; font-weight:600; color:var(--navy); cursor:pointer;}
   .info-foot button:hover{border-color:var(--navy);}
+  .info-foot button.btn-primary{background:#1B5FD6; border-color:#1B5FD6; color:#fff;}
+  .info-foot button.btn-primary:hover{background:#154DB0; border-color:#154DB0;}
   .info-foot .danger{color:#C0392B; border-color:#F0C9C4;}
   .info-foot .danger:hover{background:#FDF1EF; border-color:#C0392B;}
 </style>
@@ -673,8 +675,8 @@
     </div>
     <div class="info-body" id="info-body"></div>
     <div class="info-foot">
-      <button class="danger" id="info-delete">Modul löschen</button>
-      <div class="grp"><button id="info-view">3D ansehen</button><button id="info-select" class="btn-primary" style="display:none; padding:8px 14px; font-size:13px;">Diese Hardware wählen</button><button id="info-ok">Schließen</button></div>
+      <div class="grp"><button id="info-view">3D ansehen</button><button class="danger" id="info-delete">Modul löschen</button></div>
+      <div class="grp"><button id="info-select" class="btn-primary" style="display:none; padding:8px 14px; font-size:13px;">Diese Hardware wählen</button><button id="info-save" class="btn-primary" style="padding:8px 14px; font-size:13px;">Speichern</button><button id="info-ok">Schließen</button></div>
     </div>
   </div>
 </div>
@@ -2042,13 +2044,15 @@ function openModuleInfo(pm){
     + ' · ' + (currentEnclosure === 'cabinet' && binById(pm.bin) ? binLabel(binById(pm.bin)) + ' · ' : '') + 'Pos. ' + (idx + 1);
   const row = (k, v) => `<dt>${k}</dt><dd>${v || PH}</dd>`;
   const u = uartOf(pm);
+  infoDraft = u == null ? null : { uart: u, addr: pm.addr != null ? pm.addr : null };
   const comm = u == null
     ? `<div class="info-sec"><h4>Kommunikation</h4><p>Controller – ist mit allen UARTs (1–4) verbunden.</p></div>`
     : `<div class="info-sec"><h4>Kommunikation</h4>
         <div class="addr-row" style="margin-bottom:10px;"><label for="uart-in" style="font-size:12px;width:52px;">UART</label><input id="uart-in" type="number" min="1" max="4" value="${u}"><span style="font-size:11.5px;color:var(--muted-2);">1 – 4</span></div>
-        <div class="addr-row"><label for="addr-in" style="font-size:12px;width:52px;">Adresse</label><input id="addr-in" type="number" min="1" max="255" value="${addrOf(pm)}"><button type="button" id="addr-auto" ${pm.addr == null ? 'disabled' : ''}>Automatisch</button>
-        <span style="font-size:11.5px;color:var(--muted-2);">${pm.addr == null ? 'chronologisch vergeben' : 'manuell gesetzt'}</span></div>
-        ${addrDup(pm) ? `<div class="addr-warn">Achtung: Diese Adresse ist auf UART ${u} bereits vergeben.</div>` : ''}</div>`;
+        <div class="addr-row"><label for="addr-in" style="font-size:12px;width:52px;">Adresse</label><input id="addr-in" type="number" min="1" max="255" value="${addrOf(pm)}"><button type="button" id="addr-auto">Automatisch</button>
+        <span id="addr-mode" style="font-size:11.5px;color:var(--muted-2);"></span></div>
+        <div class="addr-warn" id="addr-warn"></div>
+        <div id="dirty-note" style="font-size:11.5px;color:#B26A00;margin-top:8px;display:none;">Ungespeicherte Änderungen – mit „Speichern“ übernehmen.</div></div>`;
   document.getElementById('info-body').innerHTML = comm + `
     <div class="info-sec"><h4>Beschreibung</h4><p>${PH}</p></div>
     <div class="info-sec"><h4>Technische Daten</h4><dl class="info-grid">
@@ -2060,17 +2064,48 @@ function openModuleInfo(pm){
     </dl></div>
     <div class="info-sec"><h4>Dokumente</h4><p>${PH}</p></div>`;
   document.getElementById('info-view').style.display = sm ? '' : 'none';
-  const uin = document.getElementById('uart-in');
-  if(uin) uin.onchange = () => { const v = parseInt(uin.value); if(v >= 1 && v <= 4){ pm.uart = lastUart = v; delete pm.addr; } refreshAll(); openModuleInfo(pm); };
-  const ain = document.getElementById('addr-in');
-  if(ain) ain.onchange = () => { const v = parseInt(ain.value); if(v >= 1 && v <= 255) pm.addr = v; else delete pm.addr; refreshAll(); openModuleInfo(pm); };
-  const aa = document.getElementById('addr-auto'); if(aa) aa.onclick = () => { delete pm.addr; refreshAll(); openModuleInfo(pm); };
+  document.getElementById('info-save').style.display = infoDraft ? '' : 'none';
+  if(infoDraft){
+    const uin = document.getElementById('uart-in'), ain = document.getElementById('addr-in');
+    uin.oninput = () => { const v = parseInt(uin.value); if(v >= 1 && v <= 4){ infoDraft.uart = v; infoDraft.addr = null; } draftSync(); };
+    ain.oninput = () => { const v = parseInt(ain.value); infoDraft.addr = (v >= 1 && v <= 255) ? v : null; draftSync(true); };
+    document.getElementById('addr-auto').onclick = () => { infoDraft.addr = null; draftSync(); };
+    draftSync(true);
+  }
   document.getElementById('info-overlay').classList.add('show');
 }
-function closeModuleInfo(){ document.getElementById('info-overlay').classList.remove('show'); infoPm = null; infoViewFn = null; infoSelectFn = null; }
-document.getElementById('info-close').addEventListener('click', closeModuleInfo);
-document.getElementById('info-ok').addEventListener('click', closeModuleInfo);
-document.getElementById('info-overlay').addEventListener('click', e => { if(e.target.id === 'info-overlay') closeModuleInfo(); });
+let infoDraft = null;
+function autoAddrFor(pm, u){ let n = 0; for(const q of placedModules){ if(q === pm) break; if(uartOf(q) === u) n++; } return n + 1; }
+function draftAddr(pm){ return infoDraft.addr != null ? infoDraft.addr : autoAddrFor(pm, infoDraft.uart); }
+function draftSync(keepInput){
+  const pm = infoPm; if(!pm || !infoDraft) return;
+  const ain = document.getElementById('addr-in'), a = draftAddr(pm);
+  if(!keepInput) ain.value = a;
+  document.getElementById('addr-mode').textContent = infoDraft.addr == null ? 'chronologisch vergeben' : 'manuell gesetzt';
+  document.getElementById('addr-auto').disabled = infoDraft.addr == null;
+  const dup = placedModules.some(q => q !== pm && uartOf(q) === infoDraft.uart && addrOf(q) === a);
+  document.getElementById('addr-warn').textContent = dup ? `Achtung: Diese Adresse ist auf UART ${infoDraft.uart} bereits vergeben.` : '';
+  document.getElementById('dirty-note').style.display = infoDirty() ? '' : 'none';
+}
+function infoDirty(){
+  const pm = infoPm; if(!pm || !infoDraft) return false;
+  return infoDraft.uart !== uartOf(pm) || infoDraft.addr !== (pm.addr != null ? pm.addr : null);
+}
+function requestCloseInfo(){
+  if(infoDirty()) askConfirm('Die Änderungen an diesem Modul wurden nicht gespeichert. Wenn Sie jetzt schließen, gehen alle nicht gespeicherten Änderungen verloren. Ist das in Ordnung?', 'Ohne Speichern schließen', closeModuleInfo);
+  else closeModuleInfo();
+}
+function saveInfo(){
+  const pm = infoPm; if(!pm || !infoDraft) return;
+  pm.uart = lastUart = infoDraft.uart;
+  if(infoDraft.addr != null) pm.addr = infoDraft.addr; else delete pm.addr;
+  closeModuleInfo(); refreshAll(); toast('Modul gespeichert.');
+}
+function closeModuleInfo(){ document.getElementById('info-overlay').classList.remove('show'); infoDraft = null; infoPm = null; infoViewFn = null; infoSelectFn = null; }
+document.getElementById('info-close').addEventListener('click', requestCloseInfo);
+document.getElementById('info-ok').addEventListener('click', requestCloseInfo);
+document.getElementById('info-save').addEventListener('click', saveInfo);
+document.getElementById('info-overlay').addEventListener('click', e => { if(e.target.id === 'info-overlay') requestCloseInfo(); });
 document.getElementById('info-select').addEventListener('click', () => { if(infoSelectFn) infoSelectFn(); });
 document.getElementById('info-delete').addEventListener('click', () => {
   if(!infoPm) return;
@@ -2078,7 +2113,7 @@ document.getElementById('info-delete').addEventListener('click', () => {
   if(i >= 0) removeModule(i);
 });
 document.getElementById('info-view').addEventListener('click', () => { if(infoViewFn) infoViewFn(); });
-document.addEventListener('keydown', e => { if(e.key === 'Escape' && !document.getElementById('viewer-overlay').classList.contains('show')) closeModuleInfo(); });
+document.addEventListener('keydown', e => { if(e.key === 'Escape' && !document.getElementById('viewer-overlay').classList.contains('show') && !document.getElementById('confirm-overlay').classList.contains('show')) requestCloseInfo(); });
 
 /* =========================================================
    PROJEKT-ASSISTENT — Frage 1: Hardware (Schaltschrankgröße)
@@ -2145,6 +2180,7 @@ function openCabinetInfo(o){
   infoSelectFn = () => { selectCabinet(o.id); closeModuleInfo(); };
   document.getElementById('info-delete').style.display = 'none';
   document.getElementById('info-select').style.display = '';
+  document.getElementById('info-save').style.display = 'none'; infoDraft = null;
   document.getElementById('info-view').style.display = '';
   document.getElementById('info-swatch').style.background = '#C9D1DB';
   document.getElementById('info-title').textContent = o.name;
