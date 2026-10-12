@@ -248,6 +248,19 @@
   .warn-badge{position:absolute; width:24px; height:24px; font-size:15px; transform:translate(-50%,-50%); pointer-events:auto; box-shadow:0 2px 8px rgba(0,0,0,.35), 0 0 0 3px rgba(245,166,35,.35); z-index:5;}
   #warn-layer{position:absolute; inset:0; overflow:hidden; pointer-events:none;}
   .readout .warn b{color:#FFB84D;}
+  .duct-note{font-size:11.5px; color:var(--muted); line-height:1.5; margin-bottom:10px;}
+  .duct-btn{border:1px solid #1B5FD6; background:#1B5FD6; color:#fff; border-radius:7px; padding:7px 11px; font-size:12px; font-weight:600; cursor:pointer; margin-bottom:10px;}
+  .duct-btn.cancel{background:#fff; color:#1B5FD6;}
+  .duct-row{display:flex; align-items:center; gap:7px; padding:6px 8px; border:1px solid var(--line); border-radius:7px; margin-bottom:5px; background:#fff; font-size:12px; cursor:pointer;}
+  .duct-row.sel{border-color:#1B5FD6; background:#E8F0FD;}
+  .duct-row.bad{border-color:#E7A39B;}
+  .duct-row b{min-width:34px; color:var(--navy);}
+  .duct-row input{width:68px; padding:4px 6px; border:1px solid var(--line); border-radius:6px; font-family:var(--mono); font-size:12px;}
+  .duct-row button{border:1px solid var(--line); background:#fff; border-radius:6px; width:24px; height:24px; cursor:pointer; font-size:12px; color:var(--navy);}
+  .duct-row .x{color:#C0392B; margin-left:auto;}
+  .duct-row small{color:#C0392B;}
+  .duct-tag{position:absolute; transform:translate(-50%,-50%); background:#fff; color:#0B2A52; border:1px solid #9CA6B2; border-radius:5px; padding:1px 6px; font:600 10.5px var(--mono); white-space:nowrap; pointer-events:none; box-shadow:0 1px 4px rgba(0,0,0,.2);}
+  .duct-tag.bad{border-color:#C0392B; color:#C0392B;}
   .addr-warn{color:#C0392B; font-size:11.5px; margin-top:6px;}
   .readout span{white-space:nowrap;}
   .readout span b{color:#fff; font-weight:500;}
@@ -935,6 +948,8 @@ function openEnclosure(type){
   const cfg = enclosureConfigs[currentEnclosure];
   MODULE_TYPES = cfg.moduleTypes;
   placedModules = cfg.defaultModules.map(m => ({...m}));
+  if(ductMode) cancelDuctMode();
+  ducts = []; activeDuct = null; ductSeq = 0;
   bins = []; activeBin = null; binSeq = 0; viewFilter = { uart:0, type:'', fn:'' }; lastUart = 1;
   if(currentEnclosure === 'cabinet') placedModules = [];       // Schaltschrank startet komplett leer
   assignInitialRows();
@@ -959,6 +974,7 @@ function buildSteps(){
     { title:'Gehäuse', complete:true, open:false, body:cfg.stepsMeta.gehaeuse },
     { title:'Bins / Einschübe', complete:currentEnclosure !== 'cabinet', open:currentEnclosure === 'cabinet', body:currentEnclosure === 'cabinet' ? '<div id="bin-planner"></div>' : cfg.stepsMeta.bins },
     { title:'Modul-Platzierung', complete:false, open:true, body:`${currentEnclosure === 'cabinet' ? 'Zuerst Bins anlegen, dann Module rechts im Katalog auswählen: Sie landen im markierten Bin (sonst im ersten mit freiem Platz) und werden lückenlos aneinandergesteckt. ' : 'Module rechts im Katalog auswählen und per Klick hinzufügen – die Module werden lückenlos aneinandergesteckt. '}Im 3D-Modell oder in der Stückliste lassen sie sich per Drag-and-drop neu anordnen.<span class="fill-label">Belegung</span><span class="fill-readout" id="slot-fill">${placedModules.length} / ${TOTAL_SLOTS} belegt</span>` },
+    ...(currentEnclosure === 'cabinet' ? [{ title:'Kabelkanal-Platzierung', complete:false, open:false, body:'<div id="duct-planner"></div>' }] : []),
     { title:'Anschlüsse & Zubehör', complete:false, open:false, body:`Kabelverschraubung M20, Steckverbinder M12 5-polig.` },
     { title:'Zusammenfassung', complete:false, open:false, body:`Technisches Datenblatt und Stückliste werden nach Abschluss als PDF exportierbar sein.` },
   ];
@@ -981,7 +997,7 @@ function renderSteps(){
     el.querySelector('.step-head').addEventListener('click', () => { s.open = !s.open; renderSteps(); });
     stepsEl.appendChild(el);
   });
-  renderBinPlanner();
+  renderBinPlanner(); renderDuctPlanner();
 }
 function renderBinPlanner(){
   const host = document.getElementById('bin-planner'); if(!host) return;
@@ -1024,8 +1040,9 @@ function syncStepFlags(){
   if(currentEnclosure !== 'cabinet' || !steps.length) return;
   steps[1].complete = bins.length > 0;
   steps[2].complete = placedModules.length > 0;
+  if(steps[3]) steps[3].complete = ducts.length > 0;
   const els = stepsEl.children;
-  [1,2].forEach(i => { const e = els[i]; if(!e) return; e.classList.toggle('complete', steps[i].complete); e.querySelector('.step-num').textContent = steps[i].complete ? '✓' : (i+1); });
+  [1,2,3].forEach(i => { const e = els[i]; if(!e) return; e.classList.toggle('complete', steps[i].complete); e.querySelector('.step-num').textContent = steps[i].complete ? '✓' : (i+1); });
 }
 
 /* ---------- right panel ---------- */
@@ -1183,6 +1200,79 @@ function modWidth(m){
 }
 /* ---------- Bins / Einschübe (nur Schaltschrank) ----------
    Raster: CAB.rows Reihen × 2 Hälften (L/R). Ganzer Bin = beide Hälften einer Reihe, halber Bin = eine Hälfte. */
+/* ---------- Kabelkanäle (nur Schaltschrank): Querschnitt 25 × 40 mm, nur waagrecht/senkrecht ---------- */
+const DUCT = { face:0.25, depth:0.40, minLen:0.5, snap:0.1 };      // 25 mm Breite (Ansicht), 40 mm Tiefe (steht von der Platte ab)
+let ducts = [], activeDuct = null, ductSeq = 0, ductMode = false, ductDraft = null, ductGhost = null;
+function ductRect(d){
+  const h = DUCT.face / 2;
+  return d.orient === 'H' ? { x0:d.x, x1:d.x + d.len, y0:d.y - h, y1:d.y + h } : { x0:d.x - h, x1:d.x + h, y0:d.y - d.len, y1:d.y };
+}
+function ductLimits(){ return { xMin: -(CAB.W/2 - 0.35), xMax: CAB.W/2 - 0.35, yMin: 0.5, yMax: CAB.H - 0.5 }; }
+function ductHitsBin(d){
+  const r = ductRect(d);
+  return bins.some(b => { const rc = binRect(b); return r.x1 > rc.x0 - 0.02 && r.x0 < rc.x1 + 0.02 && r.y1 > rc.y - 0.81 && r.y0 < rc.y + 0.81; });
+}
+function ductById(id){ return ducts.find(d => d.id === id) || null; }
+function setActiveDuct(id){ activeDuct = activeDuct === id ? null : id; renderDuctPlanner(); if(sceneInited) rebuildModulesIn3D(); }
+function maxDuctLen(d){ const L = ductLimits(); return d.orient === 'H' ? L.xMax - d.x : d.y - L.yMin; }
+function setDuctLen(d, mm){
+  let len = Math.round(mm / 10) * 0.1;
+  len = Math.max(DUCT.minLen, Math.min(len, maxDuctLen(d)));
+  d.len = len; refreshAll();
+}
+function removeDuct(d){ ducts = ducts.filter(x => x !== d); if(activeDuct === d.id) activeDuct = null; refreshAll(); }
+function startDuctMode(){
+  if(ductMode){ cancelDuctMode(); return; }
+  ductMode = true; renderDuctPlanner();
+  const [pos, look] = presetVec('front'); animateCamera(pos, look);
+  if(renderer) renderer.domElement.style.cursor = 'crosshair';
+  toast('Kabelkanal: Mit gedrückter Maustaste im Schrank aufziehen – Richtung (waagrecht/senkrecht) ergibt sich aus der Ziehrichtung. Esc = Abbrechen.');
+}
+function cancelDuctMode(){
+  ductMode = false; ductDraft = null;
+  if(ductGhost){ cabinetGroup.remove(ductGhost); ductGhost.geometry.dispose(); ductGhost.material.dispose(); ductGhost = null; }
+  if(renderer) renderer.domElement.style.cursor = '';
+  if(controls) controls.enabled = true;
+  renderDuctPlanner();
+}
+function ductFromDrag(a, b){
+  const L = ductLimits(), cl = (v, lo, hi) => Math.max(lo, Math.min(hi, v)), sn = v => Math.round(v / DUCT.snap) * DUCT.snap;
+  const ax = cl(sn(a.x), L.xMin, L.xMax), ay = cl(sn(a.y), L.yMin, L.yMax), bx = cl(sn(b.x), L.xMin, L.xMax), by = cl(sn(b.y), L.yMin, L.yMax);
+  if(Math.abs(bx - ax) >= Math.abs(by - ay)) return { orient:'H', x: Math.min(ax, bx), y: ay, len: Math.abs(bx - ax) };
+  return { orient:'V', x: ax, y: Math.max(ay, by), len: Math.abs(by - ay) };
+}
+function updateDuctGhost(d){
+  if(!ductGhost){
+    ductGhost = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color:0x1B5FD6, transparent:true, opacity:0.55, depthWrite:false }));
+    cabinetGroup.add(ductGhost);
+  }
+  const r = ductRect(d);
+  ductGhost.scale.set(Math.max(r.x1 - r.x0, 0.01), Math.max(r.y1 - r.y0, 0.01), DUCT.depth);
+  ductGhost.position.set((r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2, CAB_Z + DUCT.depth / 2);
+  ductGhost.material.color.set(ductHitsBin(d) ? 0xC0392B : 0x1B5FD6);
+}
+function finishDuct(d){
+  if(d.len < DUCT.minLen){ toast('Kabelkanal zu kurz – mindestens 50 mm.'); return; }
+  if(ductHitsBin(d)){ toast('Dort liegt ein Bin. Kabelkanäle bitte zwischen/neben den Bins platzieren.'); return; }
+  const nd = { id: ++ductSeq, name: 'KK' + ductSeq, ...d };
+  ducts.push(nd); activeDuct = nd.id; cancelDuctMode(); refreshAll();
+}
+function renderDuctPlanner(){
+  const host = document.getElementById('duct-planner'); if(!host) return;
+  host.innerHTML = `
+    <div class="duct-note">Kabelkanal-Querschnitt <b>25 × 40 mm</b> (Breite × Tiefe), nur waagrecht oder senkrecht. Länge nachträglich änderbar.</div>
+    <button type="button" class="duct-btn ${ductMode ? 'cancel' : ''}" id="duct-start">${ductMode ? 'Abbrechen' : '＋ Kabelkanal platzieren'}</button>
+    ${ducts.map(d => `<div class="duct-row ${d.id === activeDuct ? 'sel' : ''} ${ductHitsBin(d) ? 'bad' : ''}" data-d="${d.id}">
+        <b>${d.name}</b><span>${d.orient === 'H' ? 'waagrecht' : 'senkrecht'}</span>
+        <input type="number" min="50" step="10" value="${Math.round(d.len * 100)}" data-len="${d.id}"><span>mm</span>
+        <button type="button" class="x" data-del="${d.id}" title="Entfernen">✕</button>
+        ${ductHitsBin(d) ? '<small title="Kabelkanal überschneidet einen Bin">⚠ kollidiert</small>' : ''}
+      </div>`).join('') || '<div class="duct-note">Noch keine Kabelkanäle.</div>'}`;
+  document.getElementById('duct-start').onclick = startDuctMode;
+  host.querySelectorAll('[data-d]').forEach(el => el.onclick = e => { if(e.target.closest('input,button')) return; setActiveDuct(parseInt(el.dataset.d)); });
+  host.querySelectorAll('[data-len]').forEach(el => el.onchange = () => { const d = ductById(parseInt(el.dataset.len)); const v = parseFloat(el.value); if(d && v > 0) setDuctLen(d, v); else renderDuctPlanner(); });
+  host.querySelectorAll('[data-del]').forEach(el => el.onclick = () => { const d = ductById(parseInt(el.dataset.del)); if(d) removeDuct(d); });
+}
 const BIN_GAP = 0.2;                       // 20 mm Lücke zwischen zwei halben Bins
 let bins = [], activeBin = null, binSeq = 0;
 function halfW(){ return (RAIL_W - BIN_GAP) / 2; }
@@ -1340,7 +1430,7 @@ function removeModule(idx){
 function refreshSummary(){
   const cfg = enclosureConfigs[currentEnclosure];
   const resetBtn = document.getElementById('reset-all');
-  if(resetBtn) resetBtn.disabled = placedModules.length === 0 && bins.length === 0;
+  if(resetBtn) resetBtn.disabled = placedModules.length === 0 && bins.length === 0 && ducts.length === 0;
   const fillEl = document.getElementById('slot-fill');
   if(fillEl) fillEl.textContent = `${placedModules.length} / ${TOTAL_SLOTS} belegt`;
 
@@ -1360,20 +1450,20 @@ function refreshSummary(){
 
   const readout = document.getElementById('readout');
   const full = TOTAL_SLOTS > 0 && placedModules.length >= TOTAL_SLOTS;
-  const missingUart = placedModules.filter(needsUart).length;
+  const missingUart = placedModules.filter(needsUart).length, ductBad = ducts.filter(ductHitsBin).length;
   readout.innerHTML = `
     <span>PROJEKT <b>PRÜFSTAND BREMSSYSTEM</b></span><span class="sep">/</span>
     <span>BAUFORM <b>${cfg.bauformLabel.toUpperCase()}</b></span><span class="sep">/</span>
     <span>${cfg.ipLabel}</span><span class="sep">/</span>
     <span>MODULE <b>${placedModules.length}/${TOTAL_SLOTS}</b></span><span class="sep">/</span>
-    <span class="${missingUart ? 'warn' : 'ok'}">STATUS <b>${missingUart ? 'UART-DEFINITION FEHLT (' + missingUart + ')' : full ? 'MAXIMALBELEGUNG' : (currentEnclosure === 'cabinet' && !bins.length) ? 'KEINE BINS' : 'KONFIGURATION GÜLTIG'}</b></span><span class="sep">/</span>
+    <span class="${missingUart || ductBad ? 'warn' : 'ok'}">STATUS <b>${missingUart ? 'UART-DEFINITION FEHLT (' + missingUart + ')' : ductBad ? 'KABELKANAL KOLLIDIERT (' + ductBad + ')' : full ? 'MAXIMALBELEGUNG' : (currentEnclosure === 'cabinet' && !bins.length) ? 'KEINE BINS' : 'KONFIGURATION GÜLTIG'}</b></span><span class="sep">/</span>
     <span>LEISTUNGSBUDGET <b>${power} / ${cfg.powerMax} W</b></span>
   `;
 }
 function resetAllModules(){
-  if(!placedModules.length && !bins.length) return;
-  askConfirm(bins.length ? `Alle ${bins.length} Bins und ${placedModules.length} Module entfernen und neu beginnen?` : `Alle ${placedModules.length} Module aus der Konfiguration entfernen und neu beginnen?`, 'Alle entfernen', () => {
-    placedModules = []; bins = []; activeBin = null;
+  if(!placedModules.length && !bins.length && !ducts.length) return;
+  askConfirm(bins.length || ducts.length ? `Alle ${bins.length} Bins, ${placedModules.length} Module und ${ducts.length} Kabelkanäle entfernen und neu beginnen?` : `Alle ${placedModules.length} Module aus der Konfiguration entfernen und neu beginnen?`, 'Alle entfernen', () => {
+    placedModules = []; bins = []; activeBin = null; ducts = []; activeDuct = null;
     closeModuleInfo();
     refreshAll();
   });
@@ -1396,9 +1486,9 @@ function closeConfirm(){ document.getElementById('confirm-overlay').classList.re
 document.getElementById('confirm-cancel').addEventListener('click', closeConfirm);
 document.getElementById('confirm-overlay').addEventListener('click', e => { if(e.target.id === 'confirm-overlay') closeConfirm(); });
 document.getElementById('confirm-ok').addEventListener('click', () => { const cb = confirmCb; closeConfirm(); if(cb) cb(); });
-document.addEventListener('keydown', e => { if(e.key === 'Escape') closeConfirm(); });
+document.addEventListener('keydown', e => { if(e.key === 'Escape'){ closeConfirm(); if(ductMode) cancelDuctMode(); } });
 document.getElementById('reset-all').addEventListener('click', resetAllModules);
-function refreshAll(){ if(currentEnclosure === 'cabinet') TOTAL_SLOTS = binsCapacity(); renderRightPanel(); refreshSummary(); renderFilter(); renderBinPlanner(); syncStepFlags(); if(sceneInited) rebuildModulesIn3D(); }
+function refreshAll(){ if(currentEnclosure === 'cabinet') TOTAL_SLOTS = binsCapacity(); renderRightPanel(); refreshSummary(); renderFilter(); renderBinPlanner(); renderDuctPlanner(); syncStepFlags(); if(sceneInited) rebuildModulesIn3D(); }
 
 /* =========================================================
    THREE.JS SCENE — zwei Gehäusevarianten: Schaltschrank & 19″ Rack (raxx)
@@ -1516,6 +1606,7 @@ function rebuildBins3D(){
   if(!binGroup) return;
   while(binGroup.children.length){ const c = binGroup.children[0]; binGroup.remove(c); disposeTree(c); }
   if(currentEnclosure !== 'cabinet') return;
+  // (Kabelkanäle werden am Ende dieser Funktion gezeichnet)
   const railMat = new THREE.MeshStandardMaterial({ color:0x9CA6B2, roughness:0.4, metalness:0.6 });
   bins.forEach(b => {
     const rc = binRect(b), act = b.id === activeBin, cx = (rc.x0 + rc.x1) / 2, H = 1.62;
@@ -1529,6 +1620,16 @@ function rebuildBins3D(){
     const edges = new THREE.LineSegments(new THREE.EdgesGeometry(box), new THREE.LineBasicMaterial({ color: act ? 0x1B5FD6 : 0x7F9BD6 }));
     box.dispose(); edges.position.set(cx, rc.y, CAB_Z + 0.2); g.add(edges);
     binGroup.add(g);
+  });
+  const dMat = c => new THREE.MeshStandardMaterial({ color:c, roughness:0.55, metalness:0.05 });
+  ducts.forEach(d => {
+    const r = ductRect(d), bad = ductHitsBin(d), act = d.id === activeDuct;
+    const geo = new THREE.BoxGeometry(r.x1 - r.x0, r.y1 - r.y0, DUCT.depth);
+    const mesh = new THREE.Mesh(geo, dMat(bad ? 0xE8B4AE : 0xD6DCE3));
+    mesh.position.set((r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2, CAB_Z + DUCT.depth / 2);
+    mesh.userData.ductId = d.id;
+    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo), new THREE.LineBasicMaterial({ color: bad ? 0xC0392B : act ? 0x1B5FD6 : 0x7B8794 }));
+    mesh.add(edges); binGroup.add(mesh);
   });
 }
 
@@ -2306,6 +2407,12 @@ function rebuildModulesIn3D(){
   while(moduleGroup.children.length){ const c = moduleGroup.children[0]; moduleGroup.remove(c); disposeTree(c); }
   rebuildBins3D();
   warnItems.forEach(w => w.el.remove()); warnItems = [];
+  if(currentEnclosure === 'cabinet') ducts.forEach(d => {
+    const r = ductRect(d), el = document.createElement('div');
+    el.className = 'duct-tag' + (ductHitsBin(d) ? ' bad' : ''); el.textContent = `${d.name} · ${Math.round(d.len * 100)} mm`;
+    document.getElementById('warn-layer').appendChild(el);
+    warnItems.push({ el, pos: new THREE.Vector3((r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2, CAB_Z + DUCT.depth + 0.02) });
+  });
   const layout = computeLayout(placedModules);
 
   placedModules.forEach((pm, idx) => {
@@ -2393,8 +2500,8 @@ function queueRebuild(){
 function pickBin(e){
   if(!binGroup || !binGroup.children.length) return null;
   setMouse(e);
-  const hit = raycaster.intersectObjects(binGroup.children, true).find(h => h.object.userData.binId);
-  return hit ? hit.object.userData.binId : null;
+  const hit = raycaster.intersectObjects(binGroup.children, true).find(h => h.object.userData.binId || h.object.userData.ductId);
+  return hit ? (hit.object.userData.ductId ? { duct: hit.object.userData.ductId } : { bin: hit.object.userData.binId }) : null;
 }
 function initModuleDrag(){
   const el = renderer.domElement;
@@ -2402,10 +2509,17 @@ function initModuleDrag(){
   window.addEventListener('pointerup', e => {
     if(!binClick) return;
     const c = binClick; binClick = null;
-    if(Math.hypot(e.clientX - c.sx, e.clientY - c.sy) < 6) setActiveBin(c.id);
+    if(Math.hypot(e.clientX - c.sx, e.clientY - c.sy) < 6){ if(c.id.duct) setActiveDuct(c.id.duct); else setActiveBin(c.id.bin); }
   });
   el.addEventListener('pointerdown', e => {          // Capture: läuft vor OrbitControls
     if(e.button !== 0) return;
+    if(ductMode){                                      // Kabelkanal zeichnen
+      const pt = planePoint(e, CAB_Z);
+      if(!pt){ toast('Bitte Front- oder Isoansicht verwenden, um zu zeichnen.'); return; }
+      e.stopImmediatePropagation(); e.preventDefault();
+      controls.enabled = false; ductDraft = { a: pt, d: null };
+      return;
+    }
     const pm = pickModule(e);
     if(!pm){ const id = pickBin(e); binClick = id ? { id, sx: e.clientX, sy: e.clientY } : null; return; }
     if(typeOf(pm).first){                              // Station ist fixiert: nur Klick = entfernen, Ziehen dreht die Ansicht
@@ -2416,6 +2530,10 @@ function initModuleDrag(){
     drag = { pm, sx: e.clientX, sy: e.clientY, active: false };
   }, true);
   window.addEventListener('pointermove', e => {
+    if(ductMode && ductDraft){
+      const pt = planePoint(e, CAB_Z); if(!pt) return;
+      ductDraft.d = ductFromDrag(ductDraft.a, pt); updateDuctGhost(ductDraft.d); return;
+    }
     if(!drag) return;
     if(!drag.active){
       if(Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 6) return;
@@ -2433,6 +2551,12 @@ function initModuleDrag(){
     queueRebuild();
   });
   const end = e => {
+    if(ductMode && ductDraft){
+      const dd = ductDraft.d; ductDraft = null; controls.enabled = true;
+      if(!dd){ toast('Bitte mit gedrückter Maustaste aufziehen.'); return; }
+      if(e.type === 'pointerup') finishDuct(dd); else cancelDuctMode();
+      return;
+    }
     if(!drag) return;
     const d = drag; drag = null;
     controls.enabled = true; el.style.cursor = '';
