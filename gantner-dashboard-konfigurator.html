@@ -2045,8 +2045,8 @@ function openModuleInfo(pm){
   const comm = u == null
     ? `<div class="info-sec"><h4>Kommunikation</h4><p>Controller – ist mit allen UARTs (1–4) verbunden.</p></div>`
     : `<div class="info-sec"><h4>Kommunikation</h4>
-        <div class="uart-row">${[1,2,3,4].map(n => `<button type="button" data-uart="${n}" class="${u === n ? 'on' : ''}">UART ${n}</button>`).join('')}</div>
-        <div class="addr-row"><label for="addr-in" style="font-size:12px;">Adresse</label><input id="addr-in" type="number" min="1" max="255" value="${addrOf(pm)}"><button type="button" id="addr-auto" ${pm.addr == null ? 'disabled' : ''}>Automatisch</button>
+        <div class="addr-row" style="margin-bottom:10px;"><label for="uart-in" style="font-size:12px;width:52px;">UART</label><input id="uart-in" type="number" min="1" max="4" value="${u}"><span style="font-size:11.5px;color:var(--muted-2);">1 – 4</span></div>
+        <div class="addr-row"><label for="addr-in" style="font-size:12px;width:52px;">Adresse</label><input id="addr-in" type="number" min="1" max="255" value="${addrOf(pm)}"><button type="button" id="addr-auto" ${pm.addr == null ? 'disabled' : ''}>Automatisch</button>
         <span style="font-size:11.5px;color:var(--muted-2);">${pm.addr == null ? 'chronologisch vergeben' : 'manuell gesetzt'}</span></div>
         ${addrDup(pm) ? `<div class="addr-warn">Achtung: Diese Adresse ist auf UART ${u} bereits vergeben.</div>` : ''}</div>`;
   document.getElementById('info-body').innerHTML = comm + `
@@ -2060,7 +2060,8 @@ function openModuleInfo(pm){
     </dl></div>
     <div class="info-sec"><h4>Dokumente</h4><p>${PH}</p></div>`;
   document.getElementById('info-view').style.display = sm ? '' : 'none';
-  document.querySelectorAll('#info-body [data-uart]').forEach(b => b.onclick = () => { pm.uart = lastUart = parseInt(b.dataset.uart); delete pm.addr; refreshAll(); openModuleInfo(pm); });
+  const uin = document.getElementById('uart-in');
+  if(uin) uin.onchange = () => { const v = parseInt(uin.value); if(v >= 1 && v <= 4){ pm.uart = lastUart = v; delete pm.addr; } refreshAll(); openModuleInfo(pm); };
   const ain = document.getElementById('addr-in');
   if(ain) ain.onchange = () => { const v = parseInt(ain.value); if(v >= 1 && v <= 255) pm.addr = v; else delete pm.addr; refreshAll(); openModuleInfo(pm); };
   const aa = document.getElementById('addr-auto'); if(aa) aa.onclick = () => { delete pm.addr; refreshAll(); openModuleInfo(pm); };
