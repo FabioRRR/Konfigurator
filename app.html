@@ -464,7 +464,7 @@
         <div class="hero-left">
           <h1>Projektkonfigurator</h1>
           <p>Erstellen Sie maßgeschneiderte Messtechnik-Lösungen für Ihre Anwendung – modular, flexibel und präzise.</p>
-          <button class="btn-primary" id="btn-new-project" onclick="showView('wizard')"><span class="plus-circle">+</span>Neues Projekt anlegen</button>
+          <button class="btn-primary" id="btn-new-project" onclick="projectDraft.cabinet = null; showView('wizard')"><span class="plus-circle">+</span>Neues Projekt anlegen</button>
         </div>
         <div class="stats-card">
           <div class="stat">
@@ -895,6 +895,7 @@ let TOTAL_SLOTS = 12;
 /* ---------- open / switch enclosure type ---------- */
 function openEnclosure(type){
   currentEnclosure = enclosureConfigs[type] ? type : 'cabinet';
+  if(currentEnclosure === 'cabinet') setCabinetGeometry(projectDraft.cabinet);
   const cfg = enclosureConfigs[currentEnclosure];
   MODULE_TYPES = cfg.moduleTypes;
   placedModules = cfg.defaultModules.map(m => ({...m}));
@@ -1010,7 +1011,39 @@ tabModules.addEventListener('click', () => { activeTab='modules'; renderRightPan
 tabBom.addEventListener('click', () => { activeTab='bom'; renderRightPanel(); });
 
 /* ---------- Layout: Module sitzen lückenlos aneinander ---------- */
-const RAIL_W = 3.3, RAIL_ROWS_Y = [3.6, 1.5], CAB_Z = -0.72;
+/* Schaltschrank-Geometrie: wird aus den Maßen des gewählten Gehäuses berechnet (1 Einheit = 100 mm) */
+let RAIL_W = 3.3, RAIL_ROWS_Y = [3.6, 1.5], CAB_Z = -0.72;
+let CAB = { opt:null, W:5, H:5, D:2.2, rows:2, perRow:9, total:18, railW:3.3 };
+const CAB_RULES = { side:55, top:55, bottom:55, rowGap:70, backZ:30, modH:143.7, modW:36 };   // mm – Annahmen für Verdrahtung/Abstände
+function setCabinetGeometry(optId){
+  const opt = cabinetOptions.find(o => o.id === optId) || cabinetOptions[1];
+  const sm = window.STEP_MODELS && window.STEP_MODELS[opt.model];
+  const [Wmm, Hmm, Dmm] = sm ? sm.sizeMM : [500, 504, 218];
+  const r = CAB_RULES;
+  const usableW = Wmm - 2*r.side, usableH = Hmm - r.top - r.bottom;
+  const rows = Math.max(1, Math.floor((usableH + r.rowGap) / (r.modH + r.rowGap)));
+  const perRow = Math.max(1, Math.floor(usableW / r.modW + 1e-6));
+  const blockH = rows*r.modH + (rows-1)*r.rowGap;
+  const yTop = Hmm - r.top - (usableH - blockH)/2;               // Oberkante des Modulblocks
+  RAIL_ROWS_Y = Array.from({length: rows}, (_, i) => (yTop - r.modH/2 - i*(r.modH + r.rowGap)) * 0.01);
+  RAIL_W = usableW * 0.01;
+  CAB_Z = (-Dmm/2 + r.backZ) * 0.01;
+  CAB = { opt, W:Wmm*0.01, H:Hmm*0.01, D:Dmm*0.01, rows, perRow, total: rows*perRow, railW: RAIL_W };
+  const cfg = enclosureConfigs.cabinet;
+  cfg.totalSlots = CAB.total;
+  cfg.dimsLabel = `${Math.round(Wmm)}×${Math.round(Hmm)}×${Math.round(Dmm)} mm`;
+  cfg.projectSuffix = `Prüfstand Bremssystem — ${opt.name}`;
+  cfg.stepsMeta.gehaeuse = `${opt.name} (Typ ${opt.code}), ${Math.round(Wmm)} × ${Math.round(Hmm)} × ${Math.round(Dmm)} mm, IP66.`;
+  cfg.stepsMeta.bins = `${rows} DIN-Schienenreihe${rows>1?'n':''}, ${perRow} Modulplätze je Reihe (je ${r.modW} mm) — ${CAB.total} Plätze gesamt. Berechnet aus den Innenmaßen abzüglich Randabstand (${r.side} mm seitlich, ${r.top} mm oben/unten) und ${r.rowGap} mm Verdrahtungsraum zwischen den Reihen.`;
+  // Kameras auf die Gehäusegröße abstimmen
+  const fov = 36 * Math.PI/180, dist = Math.max(CAB.H, CAB.W/1.15) / (2*Math.tan(fov/2)) * 1.18 + CAB.D/2;
+  const look = [0, CAB.H*0.5, 0];
+  cfg.cameraPresets = {
+    iso:  { pos:[dist*0.62, CAB.H*0.5 + dist*0.30, dist*0.78], look },
+    front:{ pos:[0, CAB.H*0.5, dist], look },
+    side: { pos:[dist + CAB.W*0.3, CAB.H*0.5, 0], look },
+  };
+}
 function typeOf(pm){ return MODULE_TYPES.find(x => x.id === pm.id); }
 function modWidth(m){
   const sm = m.stepModel && window.STEP_MODELS && window.STEP_MODELS[m.stepModel];
@@ -1020,19 +1053,22 @@ function rowUsed(r, exclude){
   return placedModules.reduce((s, pm) => (pm !== exclude && (pm.row||0) === r) ? s + modWidth(typeOf(pm)) : s, 0);
 }
 function assignInitialRows(){
-  const used = [0,0];
+  const used = new Array(Math.max(1, RAIL_ROWS_Y.length)).fill(0);
+  const kept = [];
   placedModules.forEach(pm => {
     pm.row = 0;
-    if(currentEnclosure !== 'cabinet') return;
+    if(currentEnclosure !== 'cabinet'){ kept.push(pm); return; }
     const w = modWidth(typeOf(pm));
-    let r = used[0] + w <= RAIL_W + 1e-6 ? 0 : 1;
-    pm.row = r; used[r] += w;
+    const r = used.findIndex(u => u + w <= RAIL_W + 1e-6);
+    if(r < 0) return;                       // passt nicht mehr in dieses Gehäuse
+    pm.row = r; used[r] += w; kept.push(pm);
   });
+  placedModules = kept;
 }
 function computeLayout(list){
   const out = new Map();
   if(currentEnclosure === 'cabinet'){
-    const cur = [0,0];
+    const cur = new Array(Math.max(1, RAIL_ROWS_Y.length)).fill(0);
     list.forEach(pm => {
       const r = pm.row || 0, w = modWidth(typeOf(pm));
       out.set(pm, { x: -RAIL_W/2 + cur[r] + w/2, y: RAIL_ROWS_Y[r], z: CAB_Z, row: r });
@@ -1055,17 +1091,19 @@ function addModule(id){
     while(currentEnclosure === 'cabinet' && rowUsed(0) > RAIL_W + 1e-6){
       let last = -1; placedModules.forEach((pm,i) => { if((pm.row||0) === 0 && pm.id !== id) last = i; });
       const mv = placedModules[last];
-      if(rowUsed(1) + modWidth(typeOf(mv)) > RAIL_W + 1e-6){ placedModules.shift(); full(); return; }
-      placedModules.splice(last, 1); mv.row = 1;
-      const first1 = placedModules.findIndex(pm => (pm.row||0) === 1);
-      placedModules.splice(first1 < 0 ? placedModules.length : first1, 0, mv);
+      const target = RAIL_ROWS_Y.findIndex((_, r) => r > 0 && rowUsed(r) + modWidth(typeOf(mv)) <= RAIL_W + 1e-6);
+      if(target < 0){ placedModules.shift(); full(); return; }
+      placedModules.splice(last, 1); mv.row = target;
+      const firstT = placedModules.findIndex(pm => (pm.row||0) === target);
+      placedModules.splice(firstT < 0 ? placedModules.length : firstT, 0, mv);
     }
     refreshAll(); return;
   }
   let row = 0;
   if(currentEnclosure === 'cabinet'){
     const w = modWidth(m);
-    row = [0,1].find(r => rowUsed(r) + w <= RAIL_W + 1e-6);
+    row = RAIL_ROWS_Y.findIndex((_, r) => rowUsed(r) + w <= RAIL_W + 1e-6);
+    if(row < 0) row = undefined;
     if(row === undefined){ full(); return; }
   }
   // hinter dem letzten Modul der Schiene anhängen
@@ -1174,6 +1212,7 @@ function initSceneIfNeeded(){
   camera.position.set(7.5, 5.2, 8.8);
 
   renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true });
+  renderer.localClippingEnabled = true;
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(host.clientWidth, host.clientHeight);
   renderer.shadowMap.enabled = true;
@@ -1182,8 +1221,8 @@ function initSceneIfNeeded(){
   controls = new THREE.OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
-  controls.minDistance = 3.5;
-  controls.maxDistance = 22;
+  controls.minDistance = 2;
+  controls.maxDistance = 40;
   controls.target.set(0.4, 2.6, 0);
   controls.maxPolarAngle = Math.PI * 0.53;
 
@@ -1222,7 +1261,8 @@ function initSceneIfNeeded(){
 let shellGroup = null;
 function loadEnclosure3D(type){
   if(!cabinetGroup) return;
-  if(shellGroup){ cabinetGroup.remove(shellGroup); }
+  if(shellGroup){ cabinetGroup.remove(shellGroup); shellGroup.traverse(n => { if(n.material && n.geometry && !(n.geometry.userData && n.geometry.userData.shared)) { n.material.dispose && n.material.dispose(); } }); }
+  shellClip = null;
   shellGroup = new THREE.Group();
   cabinetGroup.add(shellGroup);
   cabinetGroup.rotation.y = 0;
@@ -1239,71 +1279,34 @@ function loadEnclosure3D(type){
   document.querySelectorAll('.view-toolbar button').forEach(b => b.classList.toggle('on', b.dataset.view === 'iso'));
 }
 
+let shellClip = null;
 function buildCabinetShell(shell){
-  const shellMat = new THREE.MeshStandardMaterial({ color:0xEEF1F4, roughness:0.55, metalness:0.08 });
-  const trimMat = new THREE.MeshStandardMaterial({ color:0x1B5FD6, roughness:0.35, metalness:0.3 });
-  const backMat = new THREE.MeshStandardMaterial({ color:0xF6F7F9, roughness:0.6, metalness:0.05 });
+  const opt = CAB.opt || cabinetOptions[1];
+  const model = loadStepModel(opt.model);
   const railMat = new THREE.MeshStandardMaterial({ color:0x9CA6B2, roughness:0.4, metalness:0.6 });
-  const doorFrameMat = new THREE.MeshStandardMaterial({ color:0xE3E7EC, roughness:0.4, metalness:0.15, transparent:true, opacity:0.97 });
-  const gasketMat = new THREE.MeshStandardMaterial({ color:0x1A2027, roughness:0.8 });
-
-  const W=4.2, H=5.3, D=2.15;
-
-  // back panel (interior mounting plate)
-  const back = new THREE.Mesh(new THREE.BoxGeometry(W-0.15, H-0.15, 0.08), backMat);
-  back.position.set(0, H/2, -D/2 + 0.06);
-  back.receiveShadow = true;
-  shell.add(back);
-
-  // side + top/bottom shell walls
-  const sideGeo = new THREE.BoxGeometry(0.1, H, D);
-  const left = new THREE.Mesh(sideGeo, shellMat); left.position.set(-W/2, H/2, 0); left.castShadow=true; shell.add(left);
-  const right = new THREE.Mesh(sideGeo, shellMat); right.position.set(W/2, H/2, 0); right.castShadow=true; shell.add(right);
-  const topBottomGeo = new THREE.BoxGeometry(W, 0.1, D);
-  const top = new THREE.Mesh(topBottomGeo, shellMat); top.position.set(0, H, 0); top.castShadow=true; shell.add(top);
-  const bottom = new THREE.Mesh(topBottomGeo, shellMat); bottom.position.set(0, 0, 0); bottom.receiveShadow=true; shell.add(bottom);
-
-  // blue trim strips top and bottom (brand accent, matches reference)
-  const trimTop = new THREE.Mesh(new THREE.BoxGeometry(W+0.06, 0.16, D+0.06), trimMat);
-  trimTop.position.set(0, H+0.02, 0); shell.add(trimTop);
-  const trimBottom = new THREE.Mesh(new THREE.BoxGeometry(W+0.06, 0.16, D+0.06), trimMat);
-  trimBottom.position.set(0, -0.02, 0); shell.add(trimBottom);
-
-  // hinges (right side, matching reference photo where door opens to the right)
-  for(let i=0;i<3;i++){
-    const hinge = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.35, 0.16), trimMat);
-    hinge.position.set(W/2, 0.9 + i*1.8, D/2 + 0.05);
-    shell.add(hinge);
+  const D = CAB.D;
+  if(model){
+    // Tür ausblenden: Clipping-Ebene knapp hinter der Türebene (wird pro Frame mit dem Gehäuse mitgeführt)
+    const base = new THREE.Plane(new THREE.Vector3(0,0,-1), -D/2 + D*0.9);
+    shellClip = { base, plane: base.clone() };
+    const g = new THREE.Group();
+    model.parts.forEach(pt => {
+      const m = pt.mat.clone();
+      m.userData = {};                       // eigene Instanz → wird beim Wechsel entsorgt
+      m.clippingPlanes = [shellClip.plane]; m.side = THREE.DoubleSide;
+      const mesh = new THREE.Mesh(pt.geo, m);
+      g.add(mesh);
+    });
+    g.scale.setScalar(MM_TO_UNIT);
+    g.position.set(0, 0, -D/2);
+    shell.add(g);
   }
-
-  // open door, hinged on the right, swung open toward viewer
-  const doorGroup = new THREE.Group();
-  doorGroup.position.set(W/2, 0, D/2);
-  const door = new THREE.Mesh(new THREE.BoxGeometry(W-0.1, H-0.1, 0.07), doorFrameMat);
-  door.position.set(-(W-0.1)/2, H/2, 0.04);
-  door.castShadow = true;
-  doorGroup.add(door);
-  const gasket = new THREE.Mesh(new THREE.BoxGeometry(W-0.3, H-0.3, 0.02), gasketMat);
-  gasket.position.set(-(W-0.1)/2, H/2, 0.075);
-  doorGroup.add(gasket);
-  const doorTrim = new THREE.Mesh(new THREE.BoxGeometry(W-0.1, 0.12, 0.09), trimMat);
-  doorTrim.position.set(-(W-0.1)/2, H-0.15, 0.05);
-  doorGroup.add(doorTrim);
-  doorGroup.rotation.y = -Math.PI * 0.62;
-  shell.add(doorGroup);
-
-  // DIN rails (2 rows)
-  for(let r=0;r<2;r++){
-    const rail = new THREE.Mesh(new THREE.BoxGeometry(W-0.7, 0.07, 0.14), railMat);
-    rail.position.set(0, 1.5 + r*2.1, -D/2 + 0.4);
-    rail.castShadow = true;
+  // DIN-Schienen: je Modulreihe eine Schiene, Modulrückseite liegt auf der Schiene
+  RAIL_ROWS_Y.forEach(y => {
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(CAB.railW + 0.06, 0.35, 0.075), railMat);
+    rail.position.set(0, y, CAB_Z - 0.0375);
     shell.add(rail);
-  }
-
-  // nameplate
-  const plate = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.3, 0.01), new THREE.MeshStandardMaterial({color:0xD5DAE1, roughness:0.5}));
-  plate.position.set(0, 4.6, -D/2+0.09);
-  shell.add(plate);
+  });
 }
 
 /* ---------- 19″ Rack — raxx: 3HE Baugruppenträger mit Fronteinschüben ---------- */
@@ -1505,7 +1508,7 @@ function buildCabinetModuleMesh(m, p, placedIndex){
   const mat = new THREE.MeshStandardMaterial({ color: new THREE.Color(m.color), roughness:0.35, metalness:0.35 });
   const geo = new THREE.BoxGeometry(0.36, 1.44, 0.44);
   const mesh = new THREE.Mesh(geo, mat);
-  mesh.position.set(p.x, p.y, p.z);
+  mesh.position.set(p.x, p.y, p.z + 0.22);
   mesh.castShadow = true;
   mesh.userData = { placedIndex, isModule:true };
   const group = new THREE.Group();
@@ -1515,7 +1518,7 @@ function buildCabinetModuleMesh(m, p, placedIndex){
     new THREE.BoxGeometry(0.28, 0.14, 0.02),
     new THREE.MeshStandardMaterial({ color:0xffffff, roughness:0.6 })
   );
-  label.position.set(p.x, p.y + 0.5, p.z + 0.23);
+  label.position.set(p.x, p.y + 0.5, p.z + 0.45);
   group.add(label);
   return group;
 }
@@ -1740,7 +1743,7 @@ function buildStepModuleMesh(m, p, placedIndex){
   outer.userData = { placedIndex, isModule:true };
   const hMM = model.sizeMM[1] * MM_TO_UNIT;
   // Schaltschrank: Rückseite liegt an der DIN-Schiene, vertikal um den Platz zentriert
-  g.position.set(p.x, p.y - hMM/2, -0.62);
+  g.position.set(p.x, p.y - hMM/2, p.z);
   outer.add(g);
   return outer;
 }
@@ -1900,7 +1903,7 @@ function renderWizardCards(){
 function selectCabinet(id){ projectDraft.cabinet = id; renderWizardCards(); }
 document.getElementById('wiz-next').addEventListener('click', () => {
   const sel = cabinetOptions.find(x => x.id === projectDraft.cabinet); if(!sel) return;
-  toast(`Hardware gespeichert: ${sel.name} (Typ ${sel.code}). Weitere Fragen folgen.`);
+  showView('configurator', 'cabinet');
 });
 
 function openCabinetInfo(o){
@@ -2059,7 +2062,8 @@ function retarget(pm, cx, cy){
   const others = placedModules.filter(q => q !== pm);
   let at;
   if(currentEnclosure === 'cabinet'){
-    let row = cy > (RAIL_ROWS_Y[0] + RAIL_ROWS_Y[1]) / 2 ? 0 : 1;
+    let row = 0, best = Infinity;
+    RAIL_ROWS_Y.forEach((ry, r) => { const d = Math.abs(ry - cy); if(d < best){ best = d; row = r; } });
     if(rowUsed(row, pm) + modWidth(typeOf(pm)) > RAIL_W + 1e-6) row = pm.row || 0;
     const lay = computeLayout(others);
     const inRow = others.filter(q => (q.row||0) === row);
@@ -2133,6 +2137,7 @@ function onResize(){
 
 function animate(){
   requestAnimationFrame(animate);
+  if(shellClip && shellGroup){ shellGroup.updateWorldMatrix(true, false); shellClip.plane.copy(shellClip.base).applyMatrix4(shellGroup.matrixWorld); }
   if(autoRotate && !(drag && drag.active)) cabinetGroup.rotation.y += 0.006;
   controls.update();
   renderer.render(scene, camera);
