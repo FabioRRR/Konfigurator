@@ -257,6 +257,7 @@
   .duct-row b{min-width:34px; color:var(--navy);}
   .duct-row input{width:68px; padding:4px 6px; border:1px solid var(--line); border-radius:6px; font-family:var(--mono); font-size:12px;}
   .duct-row button{border:1px solid var(--line); background:#fff; border-radius:6px; width:24px; height:24px; cursor:pointer; font-size:12px; color:var(--navy);}
+  .duct-row button:disabled{opacity:.35; cursor:default;}
   .duct-row .x{color:#C0392B; margin-left:auto;}
   .duct-row small{color:#C0392B;}
   .duct-tag{position:absolute; transform:translate(-50%,-50%); background:#fff; color:#0B2A52; border:1px solid #9CA6B2; border-radius:5px; padding:1px 6px; font:600 10.5px var(--mono); white-space:nowrap; pointer-events:none; box-shadow:0 1px 4px rgba(0,0,0,.2);}
@@ -1212,6 +1213,37 @@ function ductHitsBin(d){
   const r = ductRect(d);
   return bins.some(b => { const rc = binRect(b); return r.x1 > rc.x0 - 0.02 && r.x0 < rc.x1 + 0.02 && r.y1 > rc.y - 0.81 && r.y0 < rc.y + 0.81; });
 }
+/* Bündig-Anschluss: Enden rasten an Flächen quer verlaufender Kanäle (T-Stoß) bzw. an Stirnflächen fluchtender Kanäle ein */
+const DUCT_SNAP_R = 0.8;                                         // 80 mm Fangradius
+function ductSnapped(d, ignore){
+  const R = DUCT_SNAP_R, others = ducts.filter(o => o.id !== ignore), E = 0.01, M = DUCT.minLen;
+  let r = ductRect(d);
+  const nearest = (cands, ref, ok) => cands.filter(c => Math.abs(c - ref) <= R && ok(c)).sort((a, b) => Math.abs(a - ref) - Math.abs(b - ref))[0];
+  if(d.orient === 'H'){
+    let y = d.y;
+    others.filter(o => o.orient === 'H').forEach(o => { const ro = ductRect(o); if(Math.abs(o.y - y) <= 0.3 && ro.x1 >= r.x0 - R && ro.x0 <= r.x1 + R) y = o.y; });
+    const V = others.filter(o => o.orient === 'V').map(ductRect).filter(rv => y >= rv.y0 - E && y <= rv.y1 + E);
+    const Hc = others.filter(o => o.orient === 'H' && Math.abs(o.y - y) < E).map(ductRect);
+    let x0 = r.x0, x1 = r.x1;
+    const f0 = nearest([...V.map(v => v.x1), ...Hc.map(h => h.x1)], x0, c => c < x1 - M); if(f0 !== undefined) x0 = f0;
+    const f1 = nearest([...V.map(v => v.x0), ...Hc.map(h => h.x0)], x1, c => c > x0 + M); if(f1 !== undefined) x1 = f1;
+    return { orient:'H', x:x0, y, len:x1 - x0 };
+  }
+  let x = d.x;
+  others.filter(o => o.orient === 'V').forEach(o => { const ro = ductRect(o); if(Math.abs(o.x - x) <= 0.3 && ro.y1 >= r.y0 - R && ro.y0 <= r.y1 + R) x = o.x; });
+  const Hh = others.filter(o => o.orient === 'H').map(ductRect).filter(rh => x >= rh.x0 - E && x <= rh.x1 + E);
+  const Vc = others.filter(o => o.orient === 'V' && Math.abs(o.x - x) < E).map(ductRect);
+  let top = r.y1, bot = r.y0;
+  const t = nearest([...Hh.map(h => h.y0), ...Vc.map(v => v.y0)], top, c => c > bot + M); if(t !== undefined) top = t;
+  const b = nearest([...Hh.map(h => h.y1), ...Vc.map(v => v.y1)], bot, c => c < top - M); if(b !== undefined) bot = b;
+  return { orient:'V', x, y:top, len:top - bot };
+}
+function ductChanged(d, n){ return Math.abs(n.x - d.x) > 0.001 || Math.abs(n.y - d.y) > 0.001 || Math.abs(n.len - d.len) > 0.001; }
+function flushDucts(list){
+  let any = false;
+  for(let pass = 0; pass < 3; pass++) list.forEach(d => { const n = ductSnapped(d, d.id); if(ductChanged(d, n)){ Object.assign(d, n); any = true; } });
+  if(any) refreshAll(); else toast('Kabelkanäle schließen bereits bündig ab bzw. kein Anschluss in Reichweite (80 mm).');
+}
 function ductById(id){ return ducts.find(d => d.id === id) || null; }
 function setActiveDuct(id){ activeDuct = activeDuct === id ? null : id; renderDuctPlanner(); if(sceneInited) rebuildModulesIn3D(); }
 function maxDuctLen(d){ const L = ductLimits(); return d.orient === 'H' ? L.xMax - d.x : d.y - L.yMin; }
@@ -1260,15 +1292,19 @@ function finishDuct(d){
 function renderDuctPlanner(){
   const host = document.getElementById('duct-planner'); if(!host) return;
   host.innerHTML = `
-    <div class="duct-note">Kabelkanal-Querschnitt <b>25 × 40 mm</b> (Breite × Tiefe), nur waagrecht oder senkrecht. Länge nachträglich änderbar.</div>
+    <div class="duct-note">Kabelkanal-Querschnitt <b>25 × 40 mm</b> (Breite × Tiefe), nur waagrecht oder senkrecht. Länge nachträglich änderbar. Beim Zeichnen rasten Enden bis 80 mm Abstand bündig an anderen Kanälen ein; mit ⇥ lassen sich bestehende Kanäle nachträglich bündig anschließen.</div>
     <button type="button" class="duct-btn ${ductMode ? 'cancel' : ''}" id="duct-start">${ductMode ? 'Abbrechen' : '＋ Kabelkanal platzieren'}</button>
+    <button type="button" class="duct-btn cancel" id="duct-flush-all" ${ducts.some(d => ductChanged(d, ductSnapped(d, d.id))) ? '' : 'disabled'} title="Alle Kanäle bündig aneinander anschließen">⇥ Alle bündig anschließen</button>
     ${ducts.map(d => `<div class="duct-row ${d.id === activeDuct ? 'sel' : ''} ${ductHitsBin(d) ? 'bad' : ''}" data-d="${d.id}">
         <b>${d.name}</b><span>${d.orient === 'H' ? 'waagrecht' : 'senkrecht'}</span>
         <input type="number" min="50" step="10" value="${Math.round(d.len * 100)}" data-len="${d.id}"><span>mm</span>
+        <button type="button" data-flush="${d.id}" title="Bündig anschließen" ${ductChanged(d, ductSnapped(d, d.id)) ? '' : 'disabled'}>⇥</button>
         <button type="button" class="x" data-del="${d.id}" title="Entfernen">✕</button>
         ${ductHitsBin(d) ? '<small title="Kabelkanal überschneidet einen Bin">⚠ kollidiert</small>' : ''}
       </div>`).join('') || '<div class="duct-note">Noch keine Kabelkanäle.</div>'}`;
   document.getElementById('duct-start').onclick = startDuctMode;
+  document.getElementById('duct-flush-all').onclick = () => flushDucts(ducts);
+  host.querySelectorAll('[data-flush]').forEach(el => el.onclick = () => { const d = ductById(parseInt(el.dataset.flush)); if(d) flushDucts([d]); });
   host.querySelectorAll('[data-d]').forEach(el => el.onclick = e => { if(e.target.closest('input,button')) return; setActiveDuct(parseInt(el.dataset.d)); });
   host.querySelectorAll('[data-len]').forEach(el => el.onchange = () => { const d = ductById(parseInt(el.dataset.len)); const v = parseFloat(el.value); if(d && v > 0) setDuctLen(d, v); else renderDuctPlanner(); });
   host.querySelectorAll('[data-del]').forEach(el => el.onclick = () => { const d = ductById(parseInt(el.dataset.del)); if(d) removeDuct(d); });
@@ -2532,7 +2568,7 @@ function initModuleDrag(){
   window.addEventListener('pointermove', e => {
     if(ductMode && ductDraft){
       const pt = planePoint(e, CAB_Z); if(!pt) return;
-      ductDraft.d = ductFromDrag(ductDraft.a, pt); updateDuctGhost(ductDraft.d); return;
+      ductDraft.d = ductSnapped(ductFromDrag(ductDraft.a, pt), null); updateDuctGhost(ductDraft.d); return;
     }
     if(!drag) return;
     if(!drag.active){
