@@ -1227,8 +1227,8 @@ function ductSnapped(d, ignore){
     const V = others.filter(o => o.orient === 'V').map(ductRect).filter(rv => y >= rv.y0 - E && y <= rv.y1 + E);
     const Hc = others.filter(o => o.orient === 'H' && Math.abs(o.y - y) < E).map(ductRect);
     let x0 = r.x0, x1 = r.x1;
-    const f0 = nearest([...V.filter(v => x0 >= v.x0 - E).map(v => v.x1), ...Hc.filter(h => x0 >= h.x0 - E).map(h => h.x1)], x0, c => c < x1 - M); if(f0 !== undefined) x0 = f0;
-    const f1 = nearest([...V.filter(v => x1 <= v.x1 + E).map(v => v.x0), ...Hc.filter(h => x1 <= h.x1 + E).map(h => h.x0)], x1, c => c > x0 + M); if(f1 !== undefined) x1 = f1;
+    const f0 = nearest([...V.filter(v => x1 - M > v.x0 && x0 >= v.x0 - E).map(v => v.x0), ...Hc.filter(h => x0 >= h.x0 - E).map(h => h.x1)], x0, c => c < x1 - M); if(f0 !== undefined) x0 = f0;
+    const f1 = nearest([...V.filter(v => x0 + M < v.x1 && x1 <= v.x1 + E).map(v => v.x1), ...Hc.filter(h => x1 <= h.x1 + E).map(h => h.x0)], x1, c => c > x0 + M); if(f1 !== undefined) x1 = f1;
     return { orient:'H', x:x0, y, len:x1 - x0 };
   }
   let x = d.x;
@@ -1329,7 +1329,7 @@ function finishDuct(d){
 function renderDuctPlanner(){
   const host = document.getElementById('duct-planner'); if(!host) return;
   host.innerHTML = `
-    <div class="duct-note">Kabelkanal-Querschnitt <b>25 × 40 mm</b> (Breite × Tiefe), nur waagrecht oder senkrecht. Länge nachträglich änderbar. Beim Zeichnen rasten Enden bis 80 mm Abstand bündig an anderen Kanälen ein; mit ⇥ lassen sich bestehende Kanäle nachträglich bündig anschließen. Trifft ein senkrechter Kanal auf einen waagrechten, endet er immer genau an dessen Unterkante (Kante auf Kante); läuft er quer durch, wird er an dieser Kante in zwei Teile getrennt.</div>
+    <div class="duct-note">Kabelkanal-Querschnitt <b>25 × 40 mm</b> (Breite × Tiefe), nur waagrecht oder senkrecht. Länge nachträglich änderbar. Beim Zeichnen rasten Enden bis 80 mm Abstand bündig an anderen Kanälen ein; mit ⇥ lassen sich bestehende Kanäle nachträglich bündig anschließen. Trifft ein senkrechter Kanal auf einen waagrechten, endet er genau an dessen Unterkante; endet ein waagrechter an einem senkrechten, läuft er bis zu dessen äußerer Kante (Ecke Kante auf Kante). Läuft ein senkrechter quer durch, wird er an der Unterkante des waagrechten in zwei Teile getrennt.</div>
     <button type="button" class="duct-btn ${ductMode ? 'cancel' : ''}" id="duct-start">${ductMode ? 'Abbrechen' : '＋ Kabelkanal platzieren'}</button>
     <button type="button" class="duct-btn cancel" id="duct-flush-all" ${ducts.some(ductNeedsFlush) ? '' : 'disabled'} title="Alle Kanäle bündig aneinander anschließen">⇥ Alle bündig anschließen</button>
     ${ducts.map(d => `<div class="duct-row ${d.id === activeDuct ? 'sel' : ''} ${ductHitsBin(d) ? 'bad' : ''}" data-d="${d.id}">
