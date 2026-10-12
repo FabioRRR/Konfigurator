@@ -3,9 +3,10 @@
 step_to_gmod.py  -  wandelt eine STEP-Datei (CAD) in ein schlankes Web-Modell (.gmod.json) fuer den Gantner-Konfigurator.
 
 Benutzung:
-  python3 step_to_gmod.py <datei.step> <ausgabe.gmod.json> [--budget 60000] [--map z,x,y] [--drop r,g,b;r,g,b]
+  python3 step_to_gmod.py <datei.step> <ausgabe.gmod.json> [--budget 60000] [--map z,x,y] [--drop r,g,b;r,g,b] [--flip]
 
   --budget  Ziel-Anzahl Dreiecke im Web-Modell (Standard 60000)
+  --flip    dreht das Modell um 180 Grad um die Hochachse (Front <-> Rueckseite)
   --map     Zuordnung der CAD-Achsen auf Konfigurator-Achsen (Breite, Hoehe, Tiefe). Standard 'z,x,y'
             = CAD-Z ist Modulbreite, CAD-X ist Modulhoehe, CAD-Y ist Tiefe (Front bei +Y). Passt fuer die Q.bloxx-X-Modelle.
   --drop    Farbgruppen entfernen (z. B. verdeckte Innenteile), Format 'r,g,b;r,g,b'
@@ -36,6 +37,7 @@ ap.add_argument('step'); ap.add_argument('out')
 ap.add_argument('--budget', type=int, default=60000)
 ap.add_argument('--map', default='z,x,y')
 ap.add_argument('--drop', default='')
+ap.add_argument('--flip', action='store_true')   # Modell um 180 Grad um die Hochachse drehen
 ap.add_argument('--lin', type=float, default=0.08)   # mm Abweichung beim Triangulieren
 ap.add_argument('--ang', type=float, default=0.5)
 a = ap.parse_args()
@@ -93,6 +95,7 @@ size = (mx - mn)
 parts = []; out_tris = 0
 for key, V, F in groups:
     V = V[:, perm] - origin
+    if a.flip: V = np.stack([-V[:, 0], V[:, 1], size[2] - V[:, 2]], 1)
     m = trimesh.Trimesh(V, F, process=True); m.merge_vertices(); m.remove_unreferenced_vertices()
     n = len(m.faces)
     target = n if n < 3000 else max(3000, int(n * a.budget / total))
