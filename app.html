@@ -251,6 +251,21 @@
   .step-body{display:none; padding:0 18px 18px 52px; font-size:12px; color:var(--muted); line-height:1.55;}
   .step.open .step-body{display:block;}
   .fill-readout{font-family:var(--mono); font-size:13px; color:var(--navy); font-weight:600; margin-top:8px; display:block;}
+  .bin-note{font-size:11.5px; color:var(--muted); line-height:1.5; margin-bottom:10px;}
+  .bin-actions{display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px;}
+  .bin-actions button, .bin-sel button{border:1px solid var(--line); background:#fff; color:var(--navy); border-radius:7px; padding:6px 9px; font-size:11.5px; font-weight:600; cursor:pointer;}
+  .bin-actions button.pri{background:var(--blue,#1B5FD6); border-color:var(--blue,#1B5FD6); color:#fff;}
+  .bin-actions button:hover:not(:disabled), .bin-sel button:hover:not(:disabled){border-color:var(--blue,#1B5FD6);}
+  .bin-actions button:disabled, .bin-sel button:disabled{opacity:.4; cursor:default;}
+  .bin-grid{border:1px solid var(--line); border-radius:9px; padding:6px; background:#F4F6F9; display:flex; flex-direction:column; gap:4px;}
+  .bin-row{display:grid; grid-template-columns:1fr 1fr; gap:4px; height:36px;}
+  .bin-cell{border:1px dashed #C3CCD6; border-radius:6px; background:#fff; cursor:pointer; font-size:10.5px; color:var(--muted-2); display:flex; align-items:center; justify-content:center;}
+  .bin-cell.full{grid-column:1 / span 2;}
+  .bin-cell.bin{border:1px solid #1B5FD6; background:#E8F0FD; color:var(--navy); font-weight:600; justify-content:space-between; padding:0 9px;}
+  .bin-cell.bin.sel{background:#1B5FD6; color:#fff; box-shadow:0 0 0 2px rgba(27,95,214,.25);}
+  .bin-cell.bin small{font-weight:500; opacity:.8; font-family:var(--mono);}
+  .bin-sel{display:flex; gap:5px; flex-wrap:wrap; margin-top:8px; align-items:center;}
+  .bin-sel .del{color:#C0392B; border-color:#F0C9C4; margin-left:auto;}
   .fill-label{font-size:11px; color:var(--muted-2); text-transform:uppercase; letter-spacing:0.05em; margin-top:12px; display:block;}
 
   .steps-help{margin:16px; background:#F5F7FA; border-radius:10px; padding:15px; position:relative;}
@@ -898,8 +913,10 @@ function openEnclosure(type){
   const cfg = enclosureConfigs[currentEnclosure];
   MODULE_TYPES = cfg.moduleTypes;
   placedModules = cfg.defaultModules.map(m => ({...m}));
+  bins = []; activeBin = null; binSeq = 0;
+  if(currentEnclosure === 'cabinet') placedModules = [];       // Schaltschrank startet komplett leer
   assignInitialRows();
-  TOTAL_SLOTS = cfg.totalSlots;
+  TOTAL_SLOTS = currentEnclosure === 'cabinet' ? 0 : cfg.totalSlots;
 
   const crumb = document.getElementById('crumb-project');
   if(crumb) crumb.textContent = cfg.projectSuffix;
@@ -918,8 +935,8 @@ function buildSteps(){
   const cfg = enclosureConfigs[currentEnclosure];
   steps = [
     { title:'Gehäuse', complete:true, open:false, body:cfg.stepsMeta.gehaeuse },
-    { title:'Bins / Einschübe', complete:true, open:false, body:cfg.stepsMeta.bins },
-    { title:'Modul-Platzierung', complete:false, open:true, body:`Module rechts im Katalog auswählen und per Klick hinzufügen – die Module werden lückenlos aneinandergesteckt. Im 3D-Modell oder in der Stückliste lassen sie sich per Drag-and-drop neu anordnen.<span class="fill-label">Belegung</span><span class="fill-readout" id="slot-fill">${placedModules.length} / ${TOTAL_SLOTS} belegt</span>` },
+    { title:'Bins / Einschübe', complete:currentEnclosure !== 'cabinet', open:currentEnclosure === 'cabinet', body:currentEnclosure === 'cabinet' ? '<div id="bin-planner"></div>' : cfg.stepsMeta.bins },
+    { title:'Modul-Platzierung', complete:false, open:true, body:`${currentEnclosure === 'cabinet' ? 'Zuerst Bins anlegen, dann Module rechts im Katalog auswählen: Sie landen im markierten Bin (sonst im ersten mit freiem Platz) und werden lückenlos aneinandergesteckt. ' : 'Module rechts im Katalog auswählen und per Klick hinzufügen – die Module werden lückenlos aneinandergesteckt. '}Im 3D-Modell oder in der Stückliste lassen sie sich per Drag-and-drop neu anordnen.<span class="fill-label">Belegung</span><span class="fill-readout" id="slot-fill">${placedModules.length} / ${TOTAL_SLOTS} belegt</span>` },
     { title:'Anschlüsse & Zubehör', complete:false, open:false, body:`Kabelverschraubung M20, Steckverbinder M12 5-polig.` },
     { title:'Zusammenfassung', complete:false, open:false, body:`Technisches Datenblatt und Stückliste werden nach Abschluss als PDF exportierbar sein.` },
   ];
@@ -942,6 +959,51 @@ function renderSteps(){
     el.querySelector('.step-head').addEventListener('click', () => { s.open = !s.open; renderSteps(); });
     stepsEl.appendChild(el);
   });
+  renderBinPlanner();
+}
+function renderBinPlanner(){
+  const host = document.getElementById('bin-planner'); if(!host) return;
+  const hw = Math.floor(halfW() / 0.36 + 1e-6);
+  const sel = binById(activeBin);
+  let grid = '';
+  for(let r = 0; r < CAB.rows; r++){
+    const L = occupant(r, 'L'), R = occupant(r, 'R'), cell = (b, r, s) => b
+      ? `<div class="bin-cell bin ${b.size === 'full' ? 'full' : ''} ${b.id === activeBin ? 'sel' : ''}" data-bin="${b.id}">${binLabel(b)}<small>${binCount(b)}/${binCap(b)}</small></div>`
+      : `<div class="bin-cell" data-row="${r}" data-side="${s}">frei</div>`;
+    grid += `<div class="bin-row">${L && L.size === 'full' ? cell(L, r, 'L') : cell(L, r, 'L') + cell(R, r, 'R')}</div>`;
+  }
+  const canFull = (() => { for(let r = 0; r < CAB.rows; r++) if(!occupant(r,'L') && !occupant(r,'R')) return true; return false; })();
+  const canHalf = (() => { for(let r = 0; r < CAB.rows; r++) for(const s of ['L','R']) if(!occupant(r,s)) return true; return false; })();
+  host.innerHTML = `
+    <div class="bin-note">Platz laut Innenmaßen: <b>${CAB.rows}</b> ganze oder <b>${CAB.rows*2}</b> halbe Bins (${CAB.perRow} Module je ganzem, ${hw} je halbem Bin; max. ${CAB.total} Module). Der Schrank startet leer – Bins werden von oben nach unten gesetzt.</div>
+    <div class="bin-actions">
+      <button type="button" class="pri" data-act="full" ${canFull ? '' : 'disabled'}>+ Ganzer Bin</button>
+      <button type="button" class="pri" data-act="half" ${canHalf ? '' : 'disabled'}>+ Halber Bin</button>
+      <button type="button" data-act="pack" ${bins.length ? '' : 'disabled'}>Oben ausrichten</button>
+    </div>
+    <div class="bin-grid">${grid}</div>
+    <div class="bin-sel">${sel ? `
+      <span style="font-size:11.5px;"><b>${binLabel(sel)}</b> verschieben:</span>
+      <button type="button" data-mv="U" ${sel.row > 0 ? '' : 'disabled'} title="nach oben">▲</button>
+      <button type="button" data-mv="D" ${sel.row < CAB.rows-1 ? '' : 'disabled'} title="nach unten">▼</button>
+      <button type="button" data-mv="L" ${sel.size === 'half' && sel.side !== 'L' ? '' : 'disabled'} title="nach links">◀</button>
+      <button type="button" data-mv="R" ${sel.size === 'half' && sel.side !== 'R' ? '' : 'disabled'} title="nach rechts">▶</button>
+      <button type="button" class="del" data-act="del">Entfernen</button>` : `<span style="font-size:11.5px;color:var(--muted-2);">${bins.length ? 'Bin anklicken, um ihn zu verschieben oder Module gezielt dort einzusetzen.' : ''}</span>`}</div>`;
+  host.querySelector('[data-act="full"]').onclick = () => addBin('full');
+  host.querySelector('[data-act="half"]').onclick = () => addBin('half');
+  host.querySelector('[data-act="pack"]').onclick = packBins;
+  host.querySelectorAll('[data-bin]').forEach(el => el.onclick = () => setActiveBin(parseInt(el.dataset.bin)));
+  host.querySelectorAll('[data-row]').forEach(el => el.onclick = () => { const b = binById(activeBin); if(b) moveBinTo(b, parseInt(el.dataset.row), el.dataset.side); });
+  host.querySelectorAll('[data-mv]').forEach(el => el.onclick = () => { const b = binById(activeBin); if(b) moveBinDir(b, el.dataset.mv); });
+  const del = host.querySelector('[data-act="del"]'); if(del) del.onclick = () => { const b = binById(activeBin); if(b) removeBin(b); };
+}
+function setActiveBin(id){ activeBin = activeBin === id ? null : id; renderBinPlanner(); if(sceneInited) rebuildModulesIn3D(); }
+function syncStepFlags(){
+  if(currentEnclosure !== 'cabinet' || !steps.length) return;
+  steps[1].complete = bins.length > 0;
+  steps[2].complete = placedModules.length > 0;
+  const els = stepsEl.children;
+  [1,2].forEach(i => { const e = els[i]; if(!e) return; e.classList.toggle('complete', steps[i].complete); e.querySelector('.step-num').textContent = steps[i].complete ? '✓' : (i+1); });
 }
 
 /* ---------- right panel ---------- */
@@ -986,7 +1048,7 @@ function renderRightPanel(){
           <div class="bom-row" draggable="${m.first ? 'false' : 'true'}" data-idx="${idx}">
             <span class="bom-grip" title="Ziehen zum Umordnen">⋮⋮</span>
             <div class="module-swatch" style="background:${m.color};"></div>
-            <div class="bom-name">${m.name}<small>${currentEnclosure === 'cabinet' ? 'Schiene ' + ((pm.row||0)+1) + ' · ' : ''}Pos. ${idx + 1} · ${m.article ? 'Art.-Nr. ' + m.article : 'Best.-Nr. GI-' + m.id.toUpperCase() + '-X'}</small></div>
+            <div class="bom-name">${m.name}<small>${currentEnclosure === 'cabinet' && binById(pm.bin) ? binLabel(binById(pm.bin)) + ' · ' : ''}Pos. ${idx + 1} · ${m.article ? 'Art.-Nr. ' + m.article : 'Best.-Nr. GI-' + m.id.toUpperCase() + '-X'}</small></div>
             ${m.stepModel ? `<button class="bom-view" data-view="${m.id}" title="3D ansehen">3D</button>` : ''}
             <button class="bom-remove" data-idx="${idx}">✕</button>
           </div>
@@ -1055,30 +1117,108 @@ function modWidth(m){
   const sm = m.stepModel && window.STEP_MODELS && window.STEP_MODELS[m.stepModel];
   return sm ? sm.sizeMM[0] * 0.01 : 0.36;
 }
-function rowUsed(r, exclude){
-  return placedModules.reduce((s, pm) => (pm !== exclude && (pm.row||0) === r) ? s + modWidth(typeOf(pm)) : s, 0);
+/* ---------- Bins / Einschübe (nur Schaltschrank) ----------
+   Raster: CAB.rows Reihen × 2 Hälften (L/R). Ganzer Bin = beide Hälften einer Reihe, halber Bin = eine Hälfte. */
+const BIN_GAP = 0.2;                       // 20 mm Lücke zwischen zwei halben Bins
+let bins = [], activeBin = null, binSeq = 0;
+function halfW(){ return (RAIL_W - BIN_GAP) / 2; }
+function binRect(b){
+  const w = b.size === 'full' ? RAIL_W : halfW();
+  const x0 = b.size === 'full' || b.side === 'L' ? -RAIL_W/2 : RAIL_W/2 - w;
+  return { x0, x1: x0 + w, w, y: RAIL_ROWS_Y[b.row] };
 }
-function assignInitialRows(){
-  const used = new Array(Math.max(1, RAIL_ROWS_Y.length)).fill(0);
-  const kept = [];
-  placedModules.forEach(pm => {
-    pm.row = 0;
-    if(currentEnclosure !== 'cabinet'){ kept.push(pm); return; }
-    const w = modWidth(typeOf(pm));
-    const r = used.findIndex(u => u + w <= RAIL_W + 1e-6);
-    if(r < 0) return;                       // passt nicht mehr in dieses Gehäuse
-    pm.row = r; used[r] += w; kept.push(pm);
+function binCap(b){ return Math.floor(binRect(b).w / 0.36 + 1e-6); }
+function binById(id){ return bins.find(b => b.id === id) || null; }
+function binsSorted(){ return bins.slice().sort((a, b) => a.row - b.row || (a.size === 'full' ? 0 : a.side === 'L' ? 0 : 1) - (b.size === 'full' ? 0 : b.side === 'L' ? 0 : 1) || 0); }
+function binNo(b){ return binsSorted().indexOf(b) + 1; }
+function binLabel(b){ return `Bin ${binNo(b)} (${b.size === 'full' ? 'ganz' : 'halb'})`; }
+function binsCapacity(){ return bins.reduce((s, b) => s + binCap(b), 0); }
+function binUsed(b, exclude){ return placedModules.reduce((s, pm) => (pm !== exclude && pm.bin === b.id) ? s + modWidth(typeOf(pm)) : s, 0); }
+function binHasRoom(b, w, exclude){ return binUsed(b, exclude) + w <= binRect(b).w + 1e-6; }
+function binCount(b){ return placedModules.filter(pm => pm.bin === b.id).length; }
+function occupant(row, side, ignore){
+  return bins.find(b => b !== ignore && b.row === row && (b.size === 'full' || b.side === side)) || null;
+}
+function addBin(size){
+  if(!CAB.rows){ return; }
+  for(let r = 0; r < CAB.rows; r++){
+    if(size === 'full'){
+      if(!occupant(r, 'L') && !occupant(r, 'R')){ return pushBin({ size, row:r, side:'F' }); }
+    } else {
+      for(const s of ['L','R']) if(!occupant(r, s)) return pushBin({ size, row:r, side:s });
+    }
+  }
+  toast(size === 'full' ? 'Keine ganze Reihe mehr frei – schieben Sie Bins zusammen („Oben ausrichten“) oder entfernen Sie einen Bin.' : 'Kein Platz mehr für einen weiteren Bin im Gehäuse.');
+}
+function pushBin(o){
+  const b = { id: ++binSeq, ...o };
+  bins.push(b); activeBin = b.id; normalizeStation(); refreshAll();
+}
+/* Bin an Zielzelle verschieben; belegte Zielzelle → Tausch, sofern möglich */
+function moveBinTo(b, row, side){
+  if(row < 0 || row >= CAB.rows) return;
+  const newSide = b.size === 'full' ? 'F' : side;
+  if(row === b.row && newSide === b.side) return;
+  const cells = b.size === 'full' ? ['L','R'] : [side];
+  const occ = [...new Set(cells.map(s => occupant(row, s, b)).filter(Boolean))];
+  const old = { row: b.row, side: b.side };
+  if(occ.length){
+    // Verdrängte Bins in die alte Position des verschobenen Bins setzen
+    const oldCells = b.size === 'full' ? ['L','R'] : [old.side];
+    if(occ.length === 1 && occ[0].size === b.size){
+      occ[0].row = old.row; occ[0].side = old.side;
+    } else if(b.size === 'full' && occ.every(o => o.size === 'half')){
+      occ.forEach(o => { o.row = old.row; });                           // Hälften behalten ihre Seite
+    } else if(b.size === 'half' && occ[0].size === 'full' && !occupant(old.row, old.side === 'L' ? 'R' : 'L', b)){
+      occ[0].row = old.row; occ[0].side = 'F';
+    } else { toast('Dort ist bereits ein Bin – Zielplatz ist belegt.'); return; }
+  }
+  b.row = row; b.side = newSide;
+  normalizeStation(); refreshAll();
+}
+function moveBinDir(b, dir){
+  if(dir === 'U') moveBinTo(b, b.row - 1, b.side);
+  else if(dir === 'D') moveBinTo(b, b.row + 1, b.side);
+  else if(b.size === 'half') moveBinTo(b, b.row, dir);
+}
+function removeBin(b){
+  const mods = placedModules.filter(pm => pm.bin === b.id);
+  const doIt = () => {
+    placedModules = placedModules.filter(pm => pm.bin !== b.id);
+    bins = bins.filter(x => x !== b);
+    if(activeBin === b.id) activeBin = null;
+    normalizeStation(); refreshAll();
+  };
+  if(mods.length) askConfirm(`${binLabel(b)} enthält ${mods.length} Modul${mods.length>1?'e':''}. Bin samt Modulen entfernen?`, 'Entfernen', doIt); else doIt();
+}
+function packBins(){                       // alle Bins lückenlos von oben nach unten (Reihenfolge bleibt)
+  const order = binsSorted(); let r = 0, pendingHalf = false;
+  order.forEach(b => {
+    if(b.size === 'full'){ if(pendingHalf){ r++; pendingHalf = false; } b.row = r++; b.side = 'F'; }
+    else { b.row = r; if(!pendingHalf){ b.side = 'L'; pendingHalf = true; } else { b.side = 'R'; pendingHalf = false; r++; } }
   });
-  placedModules = kept;
+  normalizeStation(); refreshAll();
 }
+/* Station: immer erstes Modul – im ersten Bin (oben links), ganz links */
+function normalizeStation(){
+  if(currentEnclosure !== 'cabinet') return;
+  const i = placedModules.findIndex(pm => typeOf(pm).first); if(i < 0) return;
+  const st = placedModules[i], first = binsSorted()[0];
+  if(first && st.bin !== first.id && binHasRoom(first, modWidth(typeOf(st)), st)) st.bin = first.id;
+  placedModules.splice(i, 1); placedModules.unshift(st);
+}
+function rowUsed(r, exclude){ return 0; }
+function assignInitialRows(){ placedModules.forEach(pm => { pm.row = 0; }); }
 function computeLayout(list){
   const out = new Map();
   if(currentEnclosure === 'cabinet'){
-    const cur = new Array(Math.max(1, RAIL_ROWS_Y.length)).fill(0);
+    const cur = {};
     list.forEach(pm => {
-      const r = pm.row || 0, w = modWidth(typeOf(pm));
-      out.set(pm, { x: -RAIL_W/2 + cur[r] + w/2, y: RAIL_ROWS_Y[r], z: CAB_Z, row: r });
-      cur[r] += w;
+      const b = binById(pm.bin), w = modWidth(typeOf(pm));
+      if(!b){ out.set(pm, { x:0, y:-50, z:CAB_Z, row:0 }); return; }
+      const rc = binRect(b); cur[b.id] = cur[b.id] || 0;
+      out.set(pm, { x: rc.x0 + cur[b.id] + w/2, y: rc.y, z: CAB_Z, row: b.row });
+      cur[b.id] += w;
     });
   } else {
     const sp = getSlotPositions(currentEnclosure);
@@ -1088,35 +1228,29 @@ function computeLayout(list){
 }
 function addModule(id){
   const m = MODULE_TYPES.find(x => x.id === id);
-  const full = () => toast('Alle Modulplätze sind belegt. Erhöhen Sie die Bin-Größe im Schritt „Bins / Einschübe“.');
-  if(placedModules.length >= TOTAL_SLOTS){ full(); return; }
   if(m.unique && placedModules.some(pm => pm.id === id)){ toast(m.name + ' kann nur einmal pro Konfiguration verwendet werden.'); return; }
-  if(m.first){                       // steht immer ganz am Anfang (oberste Reihe, ganz links)
-    placedModules.unshift({ id, row: 0 });
-    // Überlauf der obersten Reihe nach unten schieben
-    while(currentEnclosure === 'cabinet' && rowUsed(0) > RAIL_W + 1e-6){
-      let last = -1; placedModules.forEach((pm,i) => { if((pm.row||0) === 0 && pm.id !== id) last = i; });
-      const mv = placedModules[last];
-      const target = RAIL_ROWS_Y.findIndex((_, r) => r > 0 && rowUsed(r) + modWidth(typeOf(mv)) <= RAIL_W + 1e-6);
-      if(target < 0){ placedModules.shift(); full(); return; }
-      placedModules.splice(last, 1); mv.row = target;
-      const firstT = placedModules.findIndex(pm => (pm.row||0) === target);
-      placedModules.splice(firstT < 0 ? placedModules.length : firstT, 0, mv);
-    }
+  if(currentEnclosure !== 'cabinet'){
+    if(placedModules.length >= TOTAL_SLOTS){ toast('Alle Modulplätze sind belegt.'); return; }
+    if(m.first) placedModules.unshift({ id, row:0 }); else placedModules.push({ id, row:0 });
     refreshAll(); return;
   }
-  let row = 0;
-  if(currentEnclosure === 'cabinet'){
-    const w = modWidth(m);
-    row = RAIL_ROWS_Y.findIndex((_, r) => rowUsed(r) + w <= RAIL_W + 1e-6);
-    if(row < 0) row = undefined;
-    if(row === undefined){ full(); return; }
+  if(!bins.length){ toast('Zuerst im Schritt „Bins / Einschübe“ einen Bin hinzufügen – dann können Module eingesetzt werden.'); return; }
+  const w = modWidth(m), order = binsSorted();
+  let target = null;
+  if(m.first) target = order.find(b => binHasRoom(b, w));             // Station: erster Bin (oben links)
+  else {
+    const act = binById(activeBin);
+    target = (act && binHasRoom(act, w)) ? act : order.find(b => binHasRoom(b, w));
   }
-  // hinter dem letzten Modul der Schiene anhängen
-  let at = placedModules.length;
-  for(let i = placedModules.length - 1; i >= 0; i--){ if((placedModules[i].row||0) === row){ at = i + 1; break; } }
-  placedModules.splice(at, 0, { id, row });
-  refreshAll();
+  if(!target){ toast('Kein Bin hat noch Platz für dieses Modul. Fügen Sie einen weiteren Bin hinzu.'); return; }
+  const pm = { id, bin: target.id };
+  if(m.first) placedModules.unshift(pm);
+  else {
+    let at = placedModules.length;
+    for(let i = placedModules.length - 1; i >= 0; i--){ if(placedModules[i].bin === target.id){ at = i + 1; break; } }
+    placedModules.splice(at, 0, pm);
+  }
+  normalizeStation(); refreshAll();
 }
 /* Verschieben per Stückliste: Modul fromIdx an die Stelle von toIdx */
 function moveModule(fromIdx, toIdx){
@@ -1124,9 +1258,10 @@ function moveModule(fromIdx, toIdx){
   const pm = placedModules[fromIdx], target = placedModules[toIdx];
   if(typeOf(pm).first) return;                                   // Station bleibt vorne
   if(typeOf(target).first && toIdx < fromIdx) return;            // nichts vor die Station
-  if(currentEnclosure === 'cabinet' && (target.row||0) !== (pm.row||0)){
-    if(rowUsed(target.row||0, pm) + modWidth(typeOf(pm)) > RAIL_W + 1e-6) return;
-    pm.row = target.row;
+  if(currentEnclosure === 'cabinet' && target.bin !== pm.bin){
+    const tb = binById(target.bin);
+    if(!tb || !binHasRoom(tb, modWidth(typeOf(pm)), pm)){ toast('Im Ziel-Bin ist nicht genug Platz.'); return; }
+    pm.bin = target.bin;
   }
   placedModules.splice(fromIdx, 1);
   placedModules.splice(placedModules.indexOf(target) + (toIdx > fromIdx ? 1 : 0), 0, pm);
@@ -1141,7 +1276,7 @@ function removeModule(idx){
 function refreshSummary(){
   const cfg = enclosureConfigs[currentEnclosure];
   const resetBtn = document.getElementById('reset-all');
-  if(resetBtn) resetBtn.disabled = placedModules.length === 0;
+  if(resetBtn) resetBtn.disabled = placedModules.length === 0 && bins.length === 0;
   const fillEl = document.getElementById('slot-fill');
   if(fillEl) fillEl.textContent = `${placedModules.length} / ${TOTAL_SLOTS} belegt`;
 
@@ -1160,20 +1295,20 @@ function refreshSummary(){
   ).join('');
 
   const readout = document.getElementById('readout');
-  const full = placedModules.length >= TOTAL_SLOTS;
+  const full = TOTAL_SLOTS > 0 && placedModules.length >= TOTAL_SLOTS;
   readout.innerHTML = `
     <span>PROJEKT <b>PRÜFSTAND BREMSSYSTEM</b></span><span class="sep">/</span>
     <span>BAUFORM <b>${cfg.bauformLabel.toUpperCase()}</b></span><span class="sep">/</span>
     <span>${cfg.ipLabel}</span><span class="sep">/</span>
     <span>MODULE <b>${placedModules.length}/${TOTAL_SLOTS}</b></span><span class="sep">/</span>
-    <span class="ok">STATUS <b>${full ? 'MAXIMALBELEGUNG' : 'KONFIGURATION GÜLTIG'}</b></span><span class="sep">/</span>
+    <span class="ok">STATUS <b>${full ? 'MAXIMALBELEGUNG' : (currentEnclosure === 'cabinet' && !bins.length) ? 'KEINE BINS' : 'KONFIGURATION GÜLTIG'}</b></span><span class="sep">/</span>
     <span>LEISTUNGSBUDGET <b>${power} / ${cfg.powerMax} W</b></span>
   `;
 }
 function resetAllModules(){
-  if(!placedModules.length) return;
-  askConfirm(`Alle ${placedModules.length} Module aus der Konfiguration entfernen und neu beginnen?`, 'Alle entfernen', () => {
-    placedModules = [];
+  if(!placedModules.length && !bins.length) return;
+  askConfirm(bins.length ? `Alle ${bins.length} Bins und ${placedModules.length} Module entfernen und neu beginnen?` : `Alle ${placedModules.length} Module aus der Konfiguration entfernen und neu beginnen?`, 'Alle entfernen', () => {
+    placedModules = []; bins = []; activeBin = null;
     closeModuleInfo();
     refreshAll();
   });
@@ -1198,13 +1333,13 @@ document.getElementById('confirm-overlay').addEventListener('click', e => { if(e
 document.getElementById('confirm-ok').addEventListener('click', () => { const cb = confirmCb; closeConfirm(); if(cb) cb(); });
 document.addEventListener('keydown', e => { if(e.key === 'Escape') closeConfirm(); });
 document.getElementById('reset-all').addEventListener('click', resetAllModules);
-function refreshAll(){ renderRightPanel(); refreshSummary(); if(sceneInited) rebuildModulesIn3D(); }
+function refreshAll(){ if(currentEnclosure === 'cabinet') TOTAL_SLOTS = binsCapacity(); renderRightPanel(); refreshSummary(); renderBinPlanner(); syncStepFlags(); if(sceneInited) rebuildModulesIn3D(); }
 
 /* =========================================================
    THREE.JS SCENE — zwei Gehäusevarianten: Schaltschrank & 19″ Rack (raxx)
 ========================================================= */
 let sceneInited = false;
-let scene, camera, renderer, controls, cabinetGroup, moduleGroup, autoRotate = false;
+let scene, camera, renderer, controls, cabinetGroup, moduleGroup, binGroup, autoRotate = false;
 
 function initSceneIfNeeded(){
   if(sceneInited) return;
@@ -1255,6 +1390,8 @@ function initSceneIfNeeded(){
   scene.add(cabinetGroup);
   moduleGroup = new THREE.Group();
   cabinetGroup.add(moduleGroup);
+  binGroup = new THREE.Group();
+  cabinetGroup.add(binGroup);
 
   loadEnclosure3D(currentEnclosure);
 
@@ -1307,11 +1444,26 @@ function buildCabinetShell(shell){
     g.position.set(0, 0, -D/2);
     shell.add(g);
   }
-  // DIN-Schienen: je Modulreihe eine Schiene, Modulrückseite liegt auf der Schiene
-  RAIL_ROWS_Y.forEach(y => {
-    const rail = new THREE.Mesh(new THREE.BoxGeometry(CAB.railW + 0.06, 0.35, 0.075), railMat);
-    rail.position.set(0, y, CAB_Z - 0.0375);
-    shell.add(rail);
+  // DIN-Schienen werden pro Bin gezeichnet (siehe rebuildBins3D)
+}
+/* Bins im 3D-Modell: Schiene + Rahmen je Bin, anklickbar */
+function rebuildBins3D(){
+  if(!binGroup) return;
+  while(binGroup.children.length){ const c = binGroup.children[0]; binGroup.remove(c); disposeTree(c); }
+  if(currentEnclosure !== 'cabinet') return;
+  const railMat = new THREE.MeshStandardMaterial({ color:0x9CA6B2, roughness:0.4, metalness:0.6 });
+  bins.forEach(b => {
+    const rc = binRect(b), act = b.id === activeBin, cx = (rc.x0 + rc.x1) / 2, H = 1.62;
+    const g = new THREE.Group();
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(rc.w + 0.06, 0.35, 0.075), railMat);
+    rail.position.set(cx, rc.y, CAB_Z - 0.0375); g.add(rail);
+    const fill = new THREE.Mesh(new THREE.PlaneGeometry(rc.w + 0.1, H),
+      new THREE.MeshBasicMaterial({ color: act ? 0x1B5FD6 : 0x6C8FD8, transparent:true, opacity: act ? 0.16 : 0.07, depthWrite:false, side:THREE.DoubleSide }));
+    fill.position.set(cx, rc.y, CAB_Z - 0.01); fill.userData.binId = b.id; g.add(fill);
+    const box = new THREE.BoxGeometry(rc.w + 0.1, H, 0.5);
+    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(box), new THREE.LineBasicMaterial({ color: act ? 0x1B5FD6 : 0x7F9BD6 }));
+    box.dispose(); edges.position.set(cx, rc.y, CAB_Z + 0.2); g.add(edges);
+    binGroup.add(g);
   });
 }
 
@@ -1831,7 +1983,7 @@ function openModuleInfo(pm){
   document.getElementById('info-swatch').style.background = m.color;
   document.getElementById('info-title').textContent = m.name;
   document.getElementById('info-sub').textContent = (m.article ? 'Art.-Nr. ' + m.article : 'Best.-Nr. GI-' + m.id.toUpperCase() + '-X')
-    + ' · ' + (currentEnclosure === 'cabinet' ? 'Schiene ' + ((pm.row||0)+1) + ' · ' : '') + 'Pos. ' + (idx + 1);
+    + ' · ' + (currentEnclosure === 'cabinet' && binById(pm.bin) ? binLabel(binById(pm.bin)) + ' · ' : '') + 'Pos. ' + (idx + 1);
   const row = (k, v) => `<dt>${k}</dt><dd>${v || PH}</dd>`;
   document.getElementById('info-body').innerHTML = `
     <div class="info-sec"><h4>Beschreibung</h4><p>${PH}</p></div>
@@ -2025,6 +2177,7 @@ function disposeTree(o){
 function rebuildModulesIn3D(){
   if(!moduleGroup) return;
   while(moduleGroup.children.length){ const c = moduleGroup.children[0]; moduleGroup.remove(c); disposeTree(c); }
+  rebuildBins3D();
   const layout = computeLayout(placedModules);
 
   placedModules.forEach((pm, idx) => {
@@ -2073,16 +2226,20 @@ function retarget(pm, cx, cy){
   const others = placedModules.filter(q => q !== pm);
   let at;
   if(currentEnclosure === 'cabinet'){
-    let row = 0, best = Infinity;
-    RAIL_ROWS_Y.forEach((ry, r) => { const d = Math.abs(ry - cy); if(d < best){ best = d; row = r; } });
-    if(rowUsed(row, pm) + modWidth(typeOf(pm)) > RAIL_W + 1e-6) row = pm.row || 0;
+    let tb = binById(pm.bin), best = Infinity;
+    const w = modWidth(typeOf(pm));
+    bins.forEach(b => {
+      const rc = binRect(b), dx = cx < rc.x0 ? rc.x0 - cx : cx > rc.x1 ? cx - rc.x1 : 0;
+      const sc = Math.abs(rc.y - cy) + dx;
+      if(sc < best && binHasRoom(b, w, pm)){ best = sc; tb = b; }
+    });
     const lay = computeLayout(others);
-    const inRow = others.filter(q => (q.row||0) === row);
-    let k = inRow.filter(q => lay.get(q).x < cx).length;
-    if(inRow.length && typeOf(inRow[0]).first) k = Math.max(k, 1);   // hinter der Station
-    pm.row = row;
-    at = k < inRow.length ? others.indexOf(inRow[k])
-       : inRow.length ? others.indexOf(inRow[inRow.length - 1]) + 1 : others.length;
+    const inBin = others.filter(q => q.bin === tb.id);
+    let k = inBin.filter(q => lay.get(q).x < cx).length;
+    if(inBin.length && typeOf(inBin[0]).first) k = Math.max(k, 1);   // hinter der Station
+    pm.bin = tb.id;
+    at = k < inBin.length ? others.indexOf(inBin[k])
+       : inBin.length ? others.indexOf(inBin[inBin.length - 1]) + 1 : others.length;
   } else {
     const sp = getSlotPositions(currentEnclosure);
     at = 0; let best = Infinity;
@@ -2097,12 +2254,24 @@ function queueRebuild(){
   if(rebuildQueued) return; rebuildQueued = true;
   requestAnimationFrame(() => { rebuildQueued = false; rebuildModulesIn3D(); });
 }
+function pickBin(e){
+  if(!binGroup || !binGroup.children.length) return null;
+  setMouse(e);
+  const hit = raycaster.intersectObjects(binGroup.children, true).find(h => h.object.userData.binId);
+  return hit ? hit.object.userData.binId : null;
+}
 function initModuleDrag(){
   const el = renderer.domElement;
+  let binClick = null;
+  window.addEventListener('pointerup', e => {
+    if(!binClick) return;
+    const c = binClick; binClick = null;
+    if(Math.hypot(e.clientX - c.sx, e.clientY - c.sy) < 6) setActiveBin(c.id);
+  });
   el.addEventListener('pointerdown', e => {          // Capture: läuft vor OrbitControls
     if(e.button !== 0) return;
     const pm = pickModule(e);
-    if(!pm) return;
+    if(!pm){ const id = pickBin(e); binClick = id ? { id, sx: e.clientX, sy: e.clientY } : null; return; }
     if(typeOf(pm).first){                              // Station ist fixiert: nur Klick = entfernen, Ziehen dreht die Ansicht
       drag = { pm, sx: e.clientX, sy: e.clientY, active: false, fixed: true };
       return;
