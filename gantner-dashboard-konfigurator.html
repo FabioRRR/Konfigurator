@@ -230,6 +230,21 @@
     background:#081E3D; color:#7FB4EA; font-family:var(--mono); font-size:11px;
     padding:8px 22px; display:flex; gap:24px; flex-shrink:0; overflow-x:auto; letter-spacing:0.02em;
   }
+  .readout{flex-wrap:wrap; row-gap:6px;}
+  .readout-main{display:flex; gap:24px; flex:1 1 auto; min-width:0; overflow-x:auto;}
+  .viewfilter{display:flex; align-items:center; gap:6px; flex-shrink:0; margin-left:auto; padding-left:16px; border-left:1px solid rgba(255,255,255,0.18);}
+  .viewfilter .vf-l{color:#7FB4EA; margin-right:2px;}
+  .viewfilter button, .viewfilter select{font-family:var(--mono); font-size:11px; background:rgba(255,255,255,0.06); color:#BFD8F3; border:1px solid rgba(255,255,255,0.18); border-radius:5px; padding:3px 8px; cursor:pointer;}
+  .viewfilter button.on{background:#1B5FD6; border-color:#1B5FD6; color:#fff;}
+  .viewfilter select option{color:#0B2A52;}
+  .viewfilter select:disabled{opacity:.45; cursor:default;}
+  .uart-row{display:flex; gap:6px; margin-bottom:10px;}
+  .uart-row button{flex:1; border:1px solid var(--line); background:#fff; border-radius:7px; padding:8px 0; font-weight:600; font-size:12.5px; cursor:pointer; color:var(--navy);}
+  .uart-row button.on{background:#1B5FD6; border-color:#1B5FD6; color:#fff;}
+  .addr-row{display:flex; gap:8px; align-items:center;}
+  .addr-row input{width:80px; padding:7px 9px; border:1px solid var(--line); border-radius:7px; font-family:var(--mono); font-size:13px;}
+  .addr-row button{border:1px solid var(--line); background:#fff; border-radius:7px; padding:7px 10px; font-size:12px; cursor:pointer;}
+  .addr-warn{color:#C0392B; font-size:11.5px; margin-top:6px;}
   .readout span{white-space:nowrap;}
   .readout span b{color:#fff; font-weight:500;}
   .readout .sep{color:rgba(255,255,255,0.18);}
@@ -569,7 +584,7 @@
     </div>
   </header>
 
-  <div class="readout" id="readout"></div>
+  <div class="readout"><div id="readout" class="readout-main"></div><div id="viewfilter" class="viewfilter"></div></div>
 
   <div class="cfg-layout">
     <div class="steps-panel">
@@ -914,7 +929,7 @@ function openEnclosure(type){
   const cfg = enclosureConfigs[currentEnclosure];
   MODULE_TYPES = cfg.moduleTypes;
   placedModules = cfg.defaultModules.map(m => ({...m}));
-  bins = []; activeBin = null; binSeq = 0;
+  bins = []; activeBin = null; binSeq = 0; viewFilter = { uart:0, type:'', fn:'' }; lastUart = 1;
   if(currentEnclosure === 'cabinet') placedModules = [];       // Schaltschrank startet komplett leer
   assignInitialRows();
   TOTAL_SLOTS = currentEnclosure === 'cabinet' ? 0 : cfg.totalSlots;
@@ -1049,7 +1064,7 @@ function renderRightPanel(){
           <div class="bom-row" draggable="${m.first ? 'false' : 'true'}" data-idx="${idx}">
             <span class="bom-grip" title="Ziehen zum Umordnen">⋮⋮</span>
             <div class="module-swatch" style="background:${m.color};"></div>
-            <div class="bom-name">${m.name}<small>${currentEnclosure === 'cabinet' && binById(pm.bin) ? binLabel(binById(pm.bin)) + ' · ' : ''}Pos. ${idx + 1} · ${m.article ? 'Art.-Nr. ' + m.article : 'Best.-Nr. GI-' + m.id.toUpperCase() + '-X'}</small></div>
+            <div class="bom-name">${m.name}<small>${currentEnclosure === 'cabinet' && binById(pm.bin) ? binLabel(binById(pm.bin)) + ' · ' : ''}Pos. ${idx + 1} · ${uartOf(pm) ? `UART ${uartOf(pm)} · Adr. ${addrOf(pm)}${addrDup(pm) ? ' ⚠' : ''} · ` : ''}${m.article ? 'Art.-Nr. ' + m.article : 'Best.-Nr. GI-' + m.id.toUpperCase() + '-X'}</small></div>
             ${m.stepModel ? `<button class="bom-view" data-view="${m.id}" title="3D ansehen">3D</button>` : ''}
             <button class="bom-remove" data-idx="${idx}">✕</button>
           </div>
@@ -1114,6 +1129,46 @@ function setCabinetGeometry(optId){
   };
 }
 function typeOf(pm){ return MODULE_TYPES.find(x => x.id === pm.id); }
+/* ---------- UART / Adresse ---------- */
+let lastUart = 1;
+function uartOf(pm){ return typeOf(pm).first ? null : (pm.uart || 1); }
+function addrOf(pm){
+  if(pm.addr != null) return pm.addr;
+  const u = uartOf(pm); if(u == null) return null;
+  return placedModules.filter(q => uartOf(q) === u).indexOf(pm) + 1;      // chronologisch je UART
+}
+function addrDup(pm){
+  const u = uartOf(pm); if(u == null) return false; const a = addrOf(pm);
+  return placedModules.some(q => q !== pm && uartOf(q) === u && addrOf(q) === a);
+}
+/* ---------- Ansichtsfilter ---------- */
+let viewFilter = { uart:0, type:'', fn:'' };
+function filterActive(){ return !!(viewFilter.uart || viewFilter.type || viewFilter.fn); }
+function matchesFilter(pm){
+  if(viewFilter.uart && !typeOf(pm).first && uartOf(pm) !== viewFilter.uart) return false;   // Station ist mit allen UARTs verbunden
+  if(viewFilter.type && pm.id !== viewFilter.type) return false;
+  return true;
+}
+function renderFilter(){
+  const host = document.getElementById('viewfilter'); if(!host) return;
+  const types = [...new Set(placedModules.map(pm => pm.id))];
+  if(viewFilter.type && !types.includes(viewFilter.type)) viewFilter.type = '';
+  host.innerHTML = `<span class="vf-l">ANSICHT</span>
+    <button type="button" data-u="0" class="${viewFilter.uart ? '' : 'on'}">Alle</button>
+    ${[1,2,3,4].map(u => `<button type="button" data-u="${u}" class="${viewFilter.uart === u ? 'on' : ''}">UART ${u}</button>`).join('')}
+    <select id="vf-type" title="Nach Modultyp filtern"><option value="">Alle Typen</option>${types.map(t => `<option value="${t}" ${viewFilter.type === t ? 'selected' : ''}>${MODULE_TYPES.find(m => m.id === t).name}</option>`).join('')}</select>
+    <select id="vf-fn" disabled title="Funktionsfilter folgt"><option>Funktion (folgt)</option></select>`;
+  host.querySelectorAll('[data-u]').forEach(b => b.onclick = () => { viewFilter.uart = parseInt(b.dataset.u); renderFilter(); if(sceneInited) rebuildModulesIn3D(); });
+  host.querySelector('#vf-type').onchange = e => { viewFilter.type = e.target.value; if(sceneInited) rebuildModulesIn3D(); };
+}
+function dimGroup(g){
+  g.traverse(n => {
+    if(!n.isMesh) return;
+    const conv = mt => { const c = mt.clone(); c.userData = {}; c.transparent = true; c.opacity = 0.13; c.depthWrite = false; if(c.color) c.color.lerp(new THREE.Color(0xB8C2CE), 0.7); if(c.emissive) c.emissive.set(0x000000); return c; };
+    n.material = Array.isArray(n.material) ? n.material.map(conv) : conv(n.material);
+    n.castShadow = false;
+  });
+}
 function modWidth(m){
   const sm = m.stepModel && window.STEP_MODELS && window.STEP_MODELS[m.stepModel];
   return sm ? sm.sizeMM[0] * 0.01 : 0.36;
@@ -1232,7 +1287,7 @@ function addModule(id){
   if(m.unique && placedModules.some(pm => pm.id === id)){ toast(m.name + ' kann nur einmal pro Konfiguration verwendet werden.'); return; }
   if(currentEnclosure !== 'cabinet'){
     if(placedModules.length >= TOTAL_SLOTS){ toast('Alle Modulplätze sind belegt.'); return; }
-    if(m.first) placedModules.unshift({ id, row:0 }); else placedModules.push({ id, row:0 });
+    if(m.first) placedModules.unshift({ id, row:0 }); else placedModules.push({ id, row:0, uart:lastUart });
     refreshAll(); return;
   }
   if(!bins.length){ toast('Zuerst im Schritt „Bins / Einschübe“ einen Bin hinzufügen – dann können Module eingesetzt werden.'); return; }
@@ -1244,7 +1299,7 @@ function addModule(id){
     target = (act && binHasRoom(act, w)) ? act : order.find(b => binHasRoom(b, w));
   }
   if(!target){ toast('Kein Bin hat noch Platz für dieses Modul. Fügen Sie einen weiteren Bin hinzu.'); return; }
-  const pm = { id, bin: target.id };
+  const pm = { id, bin: target.id, uart: lastUart };
   if(m.first) placedModules.unshift(pm);
   else {
     let at = placedModules.length;
@@ -1334,7 +1389,7 @@ document.getElementById('confirm-overlay').addEventListener('click', e => { if(e
 document.getElementById('confirm-ok').addEventListener('click', () => { const cb = confirmCb; closeConfirm(); if(cb) cb(); });
 document.addEventListener('keydown', e => { if(e.key === 'Escape') closeConfirm(); });
 document.getElementById('reset-all').addEventListener('click', resetAllModules);
-function refreshAll(){ if(currentEnclosure === 'cabinet') TOTAL_SLOTS = binsCapacity(); renderRightPanel(); refreshSummary(); renderBinPlanner(); syncStepFlags(); if(sceneInited) rebuildModulesIn3D(); }
+function refreshAll(){ if(currentEnclosure === 'cabinet') TOTAL_SLOTS = binsCapacity(); renderRightPanel(); refreshSummary(); renderFilter(); renderBinPlanner(); syncStepFlags(); if(sceneInited) rebuildModulesIn3D(); }
 
 /* =========================================================
    THREE.JS SCENE — zwei Gehäusevarianten: Schaltschrank & 19″ Rack (raxx)
@@ -1986,7 +2041,15 @@ function openModuleInfo(pm){
   document.getElementById('info-sub').textContent = (m.article ? 'Art.-Nr. ' + m.article : 'Best.-Nr. GI-' + m.id.toUpperCase() + '-X')
     + ' · ' + (currentEnclosure === 'cabinet' && binById(pm.bin) ? binLabel(binById(pm.bin)) + ' · ' : '') + 'Pos. ' + (idx + 1);
   const row = (k, v) => `<dt>${k}</dt><dd>${v || PH}</dd>`;
-  document.getElementById('info-body').innerHTML = `
+  const u = uartOf(pm);
+  const comm = u == null
+    ? `<div class="info-sec"><h4>Kommunikation</h4><p>Controller – ist mit allen UARTs (1–4) verbunden.</p></div>`
+    : `<div class="info-sec"><h4>Kommunikation</h4>
+        <div class="uart-row">${[1,2,3,4].map(n => `<button type="button" data-uart="${n}" class="${u === n ? 'on' : ''}">UART ${n}</button>`).join('')}</div>
+        <div class="addr-row"><label for="addr-in" style="font-size:12px;">Adresse</label><input id="addr-in" type="number" min="1" max="255" value="${addrOf(pm)}"><button type="button" id="addr-auto" ${pm.addr == null ? 'disabled' : ''}>Automatisch</button>
+        <span style="font-size:11.5px;color:var(--muted-2);">${pm.addr == null ? 'chronologisch vergeben' : 'manuell gesetzt'}</span></div>
+        ${addrDup(pm) ? `<div class="addr-warn">Achtung: Diese Adresse ist auf UART ${u} bereits vergeben.</div>` : ''}</div>`;
+  document.getElementById('info-body').innerHTML = comm + `
     <div class="info-sec"><h4>Beschreibung</h4><p>${PH}</p></div>
     <div class="info-sec"><h4>Technische Daten</h4><dl class="info-grid">
       ${row('Kanäle / Eingänge')}${row('Messbereich')}${row('Abtastrate')}${row('Genauigkeit')}${row('Schnittstelle')}
@@ -1997,6 +2060,10 @@ function openModuleInfo(pm){
     </dl></div>
     <div class="info-sec"><h4>Dokumente</h4><p>${PH}</p></div>`;
   document.getElementById('info-view').style.display = sm ? '' : 'none';
+  document.querySelectorAll('#info-body [data-uart]').forEach(b => b.onclick = () => { pm.uart = lastUart = parseInt(b.dataset.uart); delete pm.addr; refreshAll(); openModuleInfo(pm); });
+  const ain = document.getElementById('addr-in');
+  if(ain) ain.onchange = () => { const v = parseInt(ain.value); if(v >= 1 && v <= 255) pm.addr = v; else delete pm.addr; refreshAll(); openModuleInfo(pm); };
+  const aa = document.getElementById('addr-auto'); if(aa) aa.onclick = () => { delete pm.addr; refreshAll(); openModuleInfo(pm); };
   document.getElementById('info-overlay').classList.add('show');
 }
 function closeModuleInfo(){ document.getElementById('info-overlay').classList.remove('show'); infoPm = null; infoViewFn = null; infoSelectFn = null; }
@@ -2193,6 +2260,7 @@ function rebuildModulesIn3D(){
       : currentEnclosure === 'brixx'
       ? buildBrixxModuleMesh(m, p, idx)
       : buildCabinetModuleMesh(m, p, idx);
+    if(filterActive() && !matchesFilter(pm)) dimGroup(group);
     moduleGroup.add(group);
   });
 }
