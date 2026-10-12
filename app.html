@@ -315,6 +315,9 @@
   .price-box .amount{font-size:22px; font-weight:800; color:#fff; margin-bottom:10px;}
   .price-line{display:flex; justify-content:space-between; font-size:11px; color:#B9C9E4; padding:2px 0;}
   .price-line b{color:#fff; font-weight:500;}
+  .reset-all{margin-top:10px; width:100%; display:flex; align-items:center; justify-content:center; gap:8px; padding:10px 12px; border-radius:9px; border:1px solid #F0C9C4; background:#fff; color:#C0392B; font-size:12.5px; font-weight:600; cursor:pointer;}
+  .reset-all:hover:not(:disabled){background:#FDF1EF; border-color:#C0392B;}
+  .reset-all:disabled{opacity:.45; cursor:default;}
   .lead{font-size:10.5px; color:#7FB4EA; margin-top:8px; border-top:1px solid rgba(255,255,255,0.12); padding-top:8px;}
   .module-meta{font-family:var(--mono); font-size:10.5px; color:var(--muted-2); margin-bottom:4px;}
   .module-actions{display:flex; gap:6px; flex-wrap:wrap;}
@@ -540,6 +543,10 @@
           <div id="price-fixed-lines"></div>
           <div class="lead">Lieferzeit ca. 4–6 Wochen</div>
         </div>
+        <button class="reset-all" id="reset-all" type="button">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
+          Alle Module entfernen &amp; neu beginnen
+        </button>
       </div>
     </div>
   </div>
@@ -1014,6 +1021,8 @@ function removeModule(idx){
 /* ---------- summary + readout ---------- */
 function refreshSummary(){
   const cfg = enclosureConfigs[currentEnclosure];
+  const resetBtn = document.getElementById('reset-all');
+  if(resetBtn) resetBtn.disabled = placedModules.length === 0;
   const fillEl = document.getElementById('slot-fill');
   if(fillEl) fillEl.textContent = `${placedModules.length} / ${TOTAL_SLOTS} belegt`;
 
@@ -1042,6 +1051,14 @@ function refreshSummary(){
     <span>LEISTUNGSBUDGET <b>${power} / ${cfg.powerMax} W</b></span>
   `;
 }
+function resetAllModules(){
+  if(!placedModules.length) return;
+  if(!confirm(`Alle ${placedModules.length} Module aus der Konfiguration entfernen und neu beginnen?`)) return;
+  placedModules = [];
+  if(typeof closeModuleInfo === 'function') closeModuleInfo();
+  refreshAll();
+}
+document.getElementById('reset-all').addEventListener('click', resetAllModules);
 function refreshAll(){ renderRightPanel(); refreshSummary(); if(sceneInited) rebuildModulesIn3D(); }
 
 /* =========================================================
