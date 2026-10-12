@@ -1223,7 +1223,7 @@ function ductSnapped(d, ignore){
   const nearest = (cands, ref, ok) => cands.filter(c => Math.abs(c - ref) <= R && ok(c)).sort((a, b) => Math.abs(a - ref) - Math.abs(b - ref))[0];
   if(d.orient === 'H'){
     let y = d.y;
-    others.filter(o => o.orient === 'H').forEach(o => { const ro = ductRect(o); if(Math.abs(o.y - y) <= 0.3 && ro.x1 >= r.x0 - R && ro.x0 <= r.x1 + R) y = o.y; });
+    others.filter(o => o.orient === 'H').forEach(o => { const ro = ductRect(o); if(Math.abs(o.y - y) <= 0.3 && ((r.x0 - ro.x1 >= -E && r.x0 - ro.x1 <= R) || (ro.x0 - r.x1 >= -E && ro.x0 - r.x1 <= R))) y = o.y; });
     const V = others.filter(o => o.orient === 'V').map(ductRect).filter(rv => y >= rv.y0 - E && y <= rv.y1 + E);
     const Hc = others.filter(o => o.orient === 'H' && Math.abs(o.y - y) < E).map(ductRect);
     let x0 = r.x0, x1 = r.x1;
@@ -1232,13 +1232,51 @@ function ductSnapped(d, ignore){
     return { orient:'H', x:x0, y, len:x1 - x0 };
   }
   let x = d.x;
-  others.filter(o => o.orient === 'V').forEach(o => { const ro = ductRect(o); if(Math.abs(o.x - x) <= 0.3 && ro.y1 >= r.y0 - R && ro.y0 <= r.y1 + R) x = o.x; });
+  others.filter(o => o.orient === 'V').forEach(o => { const ro = ductRect(o); if(Math.abs(o.x - x) <= 0.3 && ((r.y0 - ro.y1 >= -E && r.y0 - ro.y1 <= R) || (ro.y0 - r.y1 >= -E && ro.y0 - r.y1 <= R))) x = o.x; });
   const Hh = others.filter(o => o.orient === 'H').map(ductRect).filter(rh => x >= rh.x0 - E && x <= rh.x1 + E);
   const Vc = others.filter(o => o.orient === 'V' && Math.abs(o.x - x) < E).map(ductRect);
   let top = r.y1, bot = r.y0;
   const t = nearest([...Hh.filter(h => top <= h.y1 + E).map(h => h.y0), ...Vc.filter(v => top <= v.y1 + E).map(v => v.y0)], top, c => c > bot + M); if(t !== undefined) top = t;
   const b = nearest([...Hh.filter(h => bot >= h.y0 - E).map(h => h.y0), ...Vc.filter(v => bot >= v.y0 - E).map(v => v.y1)], bot, c => c < top - M); if(b !== undefined) bot = b;
   return { orient:'V', x, y:top, len:top - bot };
+}
+/* Verschieben per Drag&Drop */
+let ductDrag = null;
+function ductOverlapsSame(d){
+  const r = ductRect(d), E = 0.001;
+  return ducts.some(o => o !== d && o.orient === d.orient && (() => { const q = ductRect(o); return r.x1 > q.x0 + E && r.x0 < q.x1 - E && r.y1 > q.y0 + E && r.y0 < q.y1 - E; })());
+}
+function dragSnapParallel(c, id){                                // parallel nebeneinander: Kante an Kante heften
+  const F = DUCT.face, T = 0.12, others = ducts.filter(o => o.id !== id && o.orient === c.orient), r = ductRect(c);
+  others.forEach(o => {
+    const q = ductRect(o);
+    if(c.orient === 'H'){
+      if(Math.min(r.x1, q.x1) - Math.max(r.x0, q.x0) <= 0.05) return;
+      for(const cand of [o.y + F, o.y - F]) if(Math.abs(c.y - cand) < T) c.y = cand;
+    } else {
+      if(Math.min(r.y1, q.y1) - Math.max(r.y0, q.y0) <= 0.05) return;
+      for(const cand of [o.x + F, o.x - F]) if(Math.abs(c.x - cand) < T) c.x = cand;
+    }
+  });
+}
+function moveDuctTo(d, orig, dx, dy){
+  const L = ductLimits(), cl = (v, lo, hi) => Math.max(lo, Math.min(hi, v)), sn = v => Math.round(v / DUCT.snap) * DUCT.snap;
+  const c = { orient:orig.orient, len:orig.len, x:sn(orig.x + dx), y:sn(orig.y + dy) };
+  if(c.orient === 'H'){ c.x = cl(c.x, L.xMin, L.xMax - c.len); c.y = cl(c.y, L.yMin, L.yMax); }
+  else { c.x = cl(c.x, L.xMin, L.xMax); c.y = cl(c.y, L.yMin + c.len, L.yMax); }
+  dragSnapParallel(c, d.id);
+  const n = ductSnapped(c, d.id), E = 0.001;                       // Beim Verschieben bleibt die Länge: der Kanal wird als Ganzes an die nächste Kante geschoben
+  let r = { ...c };
+  if(c.orient === 'H'){
+    r.y = n.y;
+    const ds = [n.x - c.x, (n.x + n.len) - (c.x + c.len)].filter(v => Math.abs(v) > E).sort((a, b) => Math.abs(a) - Math.abs(b))[0];
+    if(ds !== undefined) r.x = c.x + ds;
+  } else {
+    r.x = n.x;
+    const ds = [n.y - c.y, (n.y - n.len) - (c.y - c.len)].filter(v => Math.abs(v) > E).sort((a, b) => Math.abs(a) - Math.abs(b))[0];
+    if(ds !== undefined) r.y = c.y + ds;
+  }
+  Object.assign(d, r);
 }
 function ductChanged(d, n){ return Math.abs(n.x - d.x) > 0.001 || Math.abs(n.y - d.y) > 0.001 || Math.abs(n.len - d.len) > 0.001; }
 /* Kreuzungen: waagrechte Kanäle laufen durch, senkrechte werden bündig an ihnen gekürzt bzw. getrennt */
@@ -1329,7 +1367,7 @@ function finishDuct(d){
 function renderDuctPlanner(){
   const host = document.getElementById('duct-planner'); if(!host) return;
   host.innerHTML = `
-    <div class="duct-note">Kabelkanal-Querschnitt <b>25 × 40 mm</b> (Breite × Tiefe), nur waagrecht oder senkrecht. Länge nachträglich änderbar. Beim Zeichnen rasten Enden bis 80 mm Abstand bündig an anderen Kanälen ein; mit ⇥ lassen sich bestehende Kanäle nachträglich bündig anschließen. Trifft ein senkrechter Kanal auf einen waagrechten, endet er genau an dessen Unterkante; endet ein waagrechter an einem senkrechten, läuft er bis zu dessen äußerer Kante (Ecke Kante auf Kante). Läuft ein senkrechter quer durch, wird er an der Unterkante des waagrechten in zwei Teile getrennt.</div>
+    <div class="duct-note">Kabelkanal-Querschnitt <b>25 × 40 mm</b> (Breite × Tiefe), nur waagrecht oder senkrecht. Länge nachträglich änderbar. Im 3D-Modell per Drag&Drop verschiebbar (rasten bündig an anderen Kanälen ein). Beim Zeichnen rasten Enden bis 80 mm Abstand bündig an anderen Kanälen ein; mit ⇥ lassen sich bestehende Kanäle nachträglich bündig anschließen. Trifft ein senkrechter Kanal auf einen waagrechten, endet er genau an dessen Unterkante; endet ein waagrechter an einem senkrechten, läuft er bis zu dessen äußerer Kante (Ecke Kante auf Kante). Läuft ein senkrechter quer durch, wird er an der Unterkante des waagrechten in zwei Teile getrennt.</div>
     <button type="button" class="duct-btn ${ductMode ? 'cancel' : ''}" id="duct-start">${ductMode ? 'Abbrechen' : '＋ Kabelkanal platzieren'}</button>
     <button type="button" class="duct-btn cancel" id="duct-flush-all" ${ducts.some(ductNeedsFlush) ? '' : 'disabled'} title="Alle Kanäle bündig aneinander anschließen">⇥ Alle bündig anschließen</button>
     ${ducts.map(d => `<div class="duct-row ${d.id === activeDuct ? 'sel' : ''} ${ductHitsBin(d) ? 'bad' : ''}" data-d="${d.id}">
@@ -2594,7 +2632,16 @@ function initModuleDrag(){
       return;
     }
     const pm = pickModule(e);
-    if(!pm){ const id = pickBin(e); binClick = id ? { id, sx: e.clientX, sy: e.clientY } : null; return; }
+    if(!pm){
+      const id = pickBin(e);
+      if(id && id.duct){                                  // Kabelkanal: Klick = auswählen, Ziehen = verschieben
+        const d = ductById(id.duct), pt = planePoint(e, CAB_Z);
+        if(d && pt){ ductDrag = { id: d.id, orig:{ x:d.x, y:d.y, len:d.len, orient:d.orient }, start: pt, sx: e.clientX, sy: e.clientY, moved:false }; controls.enabled = false; }
+        else binClick = { id, sx: e.clientX, sy: e.clientY };
+        return;
+      }
+      binClick = id ? { id, sx: e.clientX, sy: e.clientY } : null; return;
+    }
     if(typeOf(pm).first){                              // Station ist fixiert: nur Klick = entfernen, Ziehen dreht die Ansicht
       drag = { pm, sx: e.clientX, sy: e.clientY, active: false, fixed: true };
       return;
@@ -2606,6 +2653,12 @@ function initModuleDrag(){
     if(ductMode && ductDraft){
       const pt = planePoint(e, CAB_Z); if(!pt) return;
       ductDraft.d = ductSnapped(ductFromDrag(ductDraft.a, pt), null); updateDuctGhost(ductDraft.d); return;
+    }
+    if(ductDrag){
+      if(!ductDrag.moved){ if(Math.hypot(e.clientX - ductDrag.sx, e.clientY - ductDrag.sy) < 6) return; ductDrag.moved = true; el.style.cursor = 'grabbing'; }
+      const pt = planePoint(e, CAB_Z), d = ductById(ductDrag.id); if(!pt || !d) return;
+      moveDuctTo(d, ductDrag.orig, pt.x - ductDrag.start.x, pt.y - ductDrag.start.y);
+      queueRebuild(); return;
     }
     if(!drag) return;
     if(!drag.active){
@@ -2624,6 +2677,20 @@ function initModuleDrag(){
     queueRebuild();
   });
   const end = e => {
+    if(ductDrag){
+      const dd = ductDrag; ductDrag = null; controls.enabled = true; el.style.cursor = '';
+      const d = ductById(dd.id); if(!d) return;
+      if(!dd.moved){ if(e.type === 'pointerup') setActiveDuct(d.id); return; }
+      if(e.type !== 'pointerup' || ductHitsBin(d) || ductOverlapsSame(d)){
+        const msg = ductHitsBin(d) ? 'Dort liegt ein Bin.' : 'Dort liegt bereits ein Kabelkanal.';
+        Object.assign(d, dd.orig);
+        if(e.type === 'pointerup') toast(msg);
+        refreshAll(); return;
+      }
+      activeDuct = d.id;
+      if(resolveCrossings()) toast('Kreuzung erkannt: senkrechte Kanäle enden jetzt bündig an der Unterkante der waagrechten.');
+      refreshAll(); return;
+    }
     if(ductMode && ductDraft){
       const dd = ductDraft.d; ductDraft = null; controls.enabled = true;
       if(!dd){ toast('Bitte mit gedrückter Maustaste aufziehen.'); return; }
