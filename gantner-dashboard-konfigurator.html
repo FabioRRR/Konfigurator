@@ -299,6 +299,10 @@
   .bom-row .module-swatch{width:24px; height:24px; border-radius:5px;}
   .bom-row .bom-name{flex:1; font-size:12.5px;}
   .bom-row .bom-name small{display:block; color:var(--muted-2); font-family:var(--mono); font-size:10px; margin-top:2px;}
+  .bom-row{cursor:grab;}
+  .bom-row.dragging{opacity:.4;}
+  .bom-row.drag-over{box-shadow:inset 0 2px 0 var(--blue, #1B5FD6);}
+  .bom-grip{color:var(--muted-2); font-size:13px; letter-spacing:-2px; user-select:none;}
   .bom-remove{background:none; border:none; color:var(--muted-2); font-size:15px;}
   .bom-remove:hover{color:#C4453D;}
   .bom-empty{font-size:12px; color:var(--muted); text-align:center; padding:30px 10px;}
@@ -491,7 +495,7 @@
         <button id="tool-fullscreen" title="Vollbild"><svg class="icon" viewBox="0 0 24 24"><path d="M4 9V5a1 1 0 011-1h4M20 9V5a1 1 0 00-1-1h-4M4 15v4a1 1 0 001 1h4M20 15v4a1 1 0 01-1 1h-4"/></svg></button>
         <button id="tool-iso" title="Isometrisch"><svg class="icon" viewBox="0 0 24 24"><path d="M12 2l9 5v10l-9 5-9-5V7z"/><path d="M3 7l9 5 9-5M12 12v10"/></svg></button>
       </div>
-      <div class="viewport-hint">ZIEHEN: DREHEN · SCROLLEN: ZOOM</div>
+      <div class="viewport-hint">ZIEHEN: DREHEN · MODUL ZIEHEN: UMORDNEN · SCROLLEN: ZOOM</div>
     </div>
 
     <div class="right-panel">
@@ -771,6 +775,7 @@ function openEnclosure(type){
   const cfg = enclosureConfigs[currentEnclosure];
   MODULE_TYPES = cfg.moduleTypes;
   placedModules = cfg.defaultModules.map(m => ({...m}));
+  assignInitialRows();
   TOTAL_SLOTS = cfg.totalSlots;
 
   const crumb = document.getElementById('crumb-project');
@@ -791,7 +796,7 @@ function buildSteps(){
   steps = [
     { title:'Gehäuse', complete:true, open:false, body:cfg.stepsMeta.gehaeuse },
     { title:'Bins / Einschübe', complete:true, open:false, body:cfg.stepsMeta.bins },
-    { title:'Modul-Platzierung', complete:false, open:true, body:`Module rechts im Katalog auswählen und per Klick einem freien Platz zuweisen. Die 3D-Ansicht aktualisiert sich automatisch.<span class="fill-label">Belegung</span><span class="fill-readout" id="slot-fill">${placedModules.length} / ${TOTAL_SLOTS} belegt</span>` },
+    { title:'Modul-Platzierung', complete:false, open:true, body:`Module rechts im Katalog auswählen und per Klick hinzufügen – die Module werden lückenlos aneinandergesteckt. Im 3D-Modell oder in der Stückliste lassen sie sich per Drag-and-drop neu anordnen.<span class="fill-label">Belegung</span><span class="fill-readout" id="slot-fill">${placedModules.length} / ${TOTAL_SLOTS} belegt</span>` },
     { title:'Anschlüsse & Zubehör', complete:false, open:false, body:`Kabelverschraubung M20, Steckverbinder M12 5-polig.` },
     { title:'Zusammenfassung', complete:false, open:false, body:`Technisches Datenblatt und Stückliste werden nach Abschluss als PDF exportierbar sein.` },
   ];
@@ -855,9 +860,10 @@ function renderRightPanel(){
       rpBody.innerHTML = placedModules.map((pm, idx) => {
         const m = MODULE_TYPES.find(x => x.id === pm.id);
         return `
-          <div class="bom-row">
+          <div class="bom-row" draggable="true" data-idx="${idx}">
+            <span class="bom-grip" title="Ziehen zum Umordnen">⋮⋮</span>
             <div class="module-swatch" style="background:${m.color};"></div>
-            <div class="bom-name">${m.name}<small>Slot ${pm.slot + 1} · ${m.article ? 'Art.-Nr. ' + m.article : 'Best.-Nr. GI-' + m.id.toUpperCase() + '-X'}</small></div>
+            <div class="bom-name">${m.name}<small>${currentEnclosure === 'cabinet' ? 'Schiene ' + ((pm.row||0)+1) + ' · ' : ''}Pos. ${idx + 1} · ${m.article ? 'Art.-Nr. ' + m.article : 'Best.-Nr. GI-' + m.id.toUpperCase() + '-X'}</small></div>
             ${m.stepModel ? `<button class="bom-view" data-view="${m.id}" title="3D ansehen">3D</button>` : ''}
             <button class="bom-remove" data-idx="${idx}">✕</button>
           </div>
@@ -865,20 +871,81 @@ function renderRightPanel(){
       }).join('');
       rpBody.querySelectorAll('.bom-remove').forEach(btn => btn.addEventListener('click', () => removeModule(parseInt(btn.dataset.idx))));
       rpBody.querySelectorAll('.bom-view').forEach(btn => btn.addEventListener('click', () => openModuleViewer(btn.dataset.view)));
+      let dragFrom = -1;
+      rpBody.querySelectorAll('.bom-row').forEach(row => {
+        row.addEventListener('dragstart', e => { dragFrom = parseInt(row.dataset.idx); e.dataTransfer.effectAllowed = 'move'; try{ e.dataTransfer.setData('text/plain', String(dragFrom)); }catch(_){} row.classList.add('dragging'); });
+        row.addEventListener('dragend', () => { row.classList.remove('dragging'); rpBody.querySelectorAll('.drag-over').forEach(r => r.classList.remove('drag-over')); });
+        row.addEventListener('dragover', e => { e.preventDefault(); row.classList.add('drag-over'); });
+        row.addEventListener('dragleave', () => row.classList.remove('drag-over'));
+        row.addEventListener('drop', e => { e.preventDefault(); row.classList.remove('drag-over'); if(dragFrom >= 0) moveModule(dragFrom, parseInt(row.dataset.idx)); dragFrom = -1; });
+      });
     }
   }
 }
 tabModules.addEventListener('click', () => { activeTab='modules'; renderRightPanel(); });
 tabBom.addEventListener('click', () => { activeTab='bom'; renderRightPanel(); });
 
-function firstFreeSlot(){
-  for(let i=0;i<TOTAL_SLOTS;i++){ if(!placedModules.some(pm => pm.slot === i)) return i; }
-  return -1;
+/* ---------- Layout: Module sitzen lückenlos aneinander ---------- */
+const RAIL_W = 3.3, RAIL_ROWS_Y = [1.5, 3.6], CAB_Z = -0.72;
+function typeOf(pm){ return MODULE_TYPES.find(x => x.id === pm.id); }
+function modWidth(m){
+  const sm = m.stepModel && window.STEP_MODELS && window.STEP_MODELS[m.stepModel];
+  return sm ? sm.sizeMM[0] * 0.01 : 0.5;
+}
+function rowUsed(r, exclude){
+  return placedModules.reduce((s, pm) => (pm !== exclude && (pm.row||0) === r) ? s + modWidth(typeOf(pm)) : s, 0);
+}
+function assignInitialRows(){
+  const used = [0,0];
+  placedModules.forEach(pm => {
+    pm.row = 0;
+    if(currentEnclosure !== 'cabinet') return;
+    const w = modWidth(typeOf(pm));
+    let r = used[0] + w <= RAIL_W + 1e-6 ? 0 : 1;
+    pm.row = r; used[r] += w;
+  });
+}
+function computeLayout(list){
+  const out = new Map();
+  if(currentEnclosure === 'cabinet'){
+    const cur = [0,0];
+    list.forEach(pm => {
+      const r = pm.row || 0, w = modWidth(typeOf(pm));
+      out.set(pm, { x: -RAIL_W/2 + cur[r] + w/2, y: RAIL_ROWS_Y[r], z: CAB_Z, row: r });
+      cur[r] += w;
+    });
+  } else {
+    const sp = getSlotPositions(currentEnclosure);
+    list.forEach((pm, i) => out.set(pm, { ...sp[Math.min(i, sp.length-1)], row: 0 }));
+  }
+  return out;
 }
 function addModule(id){
-  const slot = firstFreeSlot();
-  if(slot === -1){ alert('Alle Modulplätze sind belegt. Erhöhen Sie die Bin-Größe im Schritt „Bins / Einschübe“.'); return; }
-  placedModules.push({id, slot});
+  const m = MODULE_TYPES.find(x => x.id === id);
+  const full = () => alert('Alle Modulplätze sind belegt. Erhöhen Sie die Bin-Größe im Schritt „Bins / Einschübe“.');
+  if(placedModules.length >= TOTAL_SLOTS){ full(); return; }
+  let row = 0;
+  if(currentEnclosure === 'cabinet'){
+    const w = modWidth(m);
+    row = [0,1].find(r => rowUsed(r) + w <= RAIL_W + 1e-6);
+    if(row === undefined){ full(); return; }
+  }
+  // hinter dem letzten Modul der Schiene anhängen
+  let at = placedModules.length;
+  for(let i = placedModules.length - 1; i >= 0; i--){ if((placedModules[i].row||0) === row){ at = i + 1; break; } }
+  placedModules.splice(at, 0, { id, row });
+  refreshAll();
+}
+/* Verschieben per Stückliste: Modul fromIdx an die Stelle von toIdx */
+function moveModule(fromIdx, toIdx){
+  if(fromIdx === toIdx) return;
+  const pm = placedModules[fromIdx], target = placedModules[toIdx];
+  if(currentEnclosure === 'cabinet' && (target.row||0) !== (pm.row||0)){
+    if(rowUsed(target.row||0, pm) + modWidth(typeOf(pm)) > RAIL_W + 1e-6) return;
+    pm.row = target.row;
+  }
+  placedModules.splice(fromIdx, 1);
+  placedModules.splice(placedModules.indexOf(target) + (toIdx > fromIdx ? 1 : 0), 0, pm);
   refreshAll();
 }
 function removeModule(idx){
@@ -977,7 +1044,7 @@ function initSceneIfNeeded(){
   loadEnclosure3D(currentEnclosure);
 
   window.addEventListener('resize', onResize);
-  renderer.domElement.addEventListener('click', onCanvasClick);
+  initModuleDrag();
   animate();
 }
 
@@ -1481,7 +1548,9 @@ function loadStepModel(id){
     const idx = pt.i32 ? new Uint32Array(b64ToBuf(pt.idx)) : new Uint16Array(b64ToBuf(pt.idx));
     geo.setIndex(new THREE.BufferAttribute(idx, 1));
     geo.computeBoundingSphere();
-    return { geo, mat: stepMaterial(pt.color) };
+    geo.userData.shared = true;
+    const mat = stepMaterial(pt.color); mat.userData.shared = true;
+    return { geo, mat };
   });
   return (stepCache[id] = { parts, sizeMM: src.sizeMM });
 }
@@ -1575,15 +1644,24 @@ document.addEventListener('keydown', e => { if(e.key === 'Escape') closeModuleVi
 document.querySelectorAll('[data-vv]').forEach(b => b.addEventListener('click', () => setViewerAngle(b.dataset.vv)));
 window.addEventListener('resize', () => { if(viewer && viewer.running) viewerSize(); });
 
+function disposeTree(o){
+  o.traverse(n => {
+    if(n.geometry && !(n.geometry.userData && n.geometry.userData.shared)) n.geometry.dispose();
+    const ms = Array.isArray(n.material) ? n.material : (n.material ? [n.material] : []);
+    ms.forEach(mt => { if(!(mt.userData && mt.userData.shared)) mt.dispose(); });
+  });
+}
 function rebuildModulesIn3D(){
   if(!moduleGroup) return;
-  while(moduleGroup.children.length) moduleGroup.remove(moduleGroup.children[0]);
-  const slotPositions = getSlotPositions(currentEnclosure);
+  while(moduleGroup.children.length){ const c = moduleGroup.children[0]; moduleGroup.remove(c); disposeTree(c); }
+  const layout = computeLayout(placedModules);
 
-  placedModules.forEach((pm) => {
-    const m = MODULE_TYPES.find(x => x.id === pm.id);
-    const p = slotPositions[pm.slot] || slotPositions[0];
-    const idx = placedModules.indexOf(pm);
+  placedModules.forEach((pm, idx) => {
+    const m = typeOf(pm);
+    let p = layout.get(pm);
+    if(drag && drag.active && drag.pm === pm && drag.cx !== undefined){
+      p = { ...p, x: drag.cx, y: drag.cy, z: p.z + 0.3 };   // angehoben, folgt dem Mauszeiger
+    }
     const stepGroup = (m.stepModel && currentEnclosure === 'cabinet') ? buildStepModuleMesh(m, p, idx) : null;
     const group = stepGroup ? stepGroup : currentEnclosure === 'raxx'
       ? buildRaxxModuleMesh(m, p, idx)
@@ -1594,20 +1672,92 @@ function rebuildModulesIn3D(){
   });
 }
 
-/* click-to-remove */
+/* ---------- Klick = entfernen · Ziehen = Modul verschieben ---------- */
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
-function onCanvasClick(e){
+let drag = null, rebuildQueued = false;
+function setMouse(e){
   const rect = renderer.domElement.getBoundingClientRect();
   mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
   mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
   raycaster.setFromCamera(mouse, camera);
+}
+function pickModule(e){
+  setMouse(e);
   const hits = raycaster.intersectObjects(moduleGroup.children, true);
-  if(hits.length){
-    let obj = hits[0].object;
-    while(obj && obj.userData.placedIndex === undefined){ obj = obj.parent; }
-    if(obj && obj.userData.placedIndex !== undefined) removeModule(obj.userData.placedIndex);
+  if(!hits.length) return null;
+  let obj = hits[0].object;
+  while(obj && obj.userData.placedIndex === undefined){ obj = obj.parent; }
+  return obj ? placedModules[obj.userData.placedIndex] || null : null;
+}
+function planePoint(e, zc){
+  setMouse(e);
+  moduleGroup.updateWorldMatrix(true, false);
+  const inv = new THREE.Matrix4().copy(moduleGroup.matrixWorld).invert();
+  const ray = raycaster.ray.clone().applyMatrix4(inv);
+  if(Math.abs(ray.direction.z) < 0.12) return null;       // Seitenansicht: Ebene steht quer
+  return ray.at((zc - ray.origin.z) / ray.direction.z, new THREE.Vector3());
+}
+function retarget(pm, cx, cy){
+  const others = placedModules.filter(q => q !== pm);
+  let at;
+  if(currentEnclosure === 'cabinet'){
+    let row = cy < (RAIL_ROWS_Y[0] + RAIL_ROWS_Y[1]) / 2 ? 0 : 1;
+    if(rowUsed(row, pm) + modWidth(typeOf(pm)) > RAIL_W + 1e-6) row = pm.row || 0;
+    const lay = computeLayout(others);
+    const inRow = others.filter(q => (q.row||0) === row);
+    const k = inRow.filter(q => lay.get(q).x < cx).length;
+    pm.row = row;
+    at = k < inRow.length ? others.indexOf(inRow[k])
+       : inRow.length ? others.indexOf(inRow[inRow.length - 1]) + 1 : others.length;
+  } else {
+    const sp = getSlotPositions(currentEnclosure);
+    at = 0; let best = Infinity;
+    for(let i = 0; i < others.length + 1 && i < sp.length; i++){
+      const d = Math.abs(sp[i].x - cx); if(d < best){ best = d; at = i; }
+    }
   }
+  others.splice(at, 0, pm);
+  placedModules = others;
+}
+function queueRebuild(){
+  if(rebuildQueued) return; rebuildQueued = true;
+  requestAnimationFrame(() => { rebuildQueued = false; rebuildModulesIn3D(); });
+}
+function initModuleDrag(){
+  const el = renderer.domElement;
+  el.addEventListener('pointerdown', e => {          // Capture: läuft vor OrbitControls
+    if(e.button !== 0) return;
+    const pm = pickModule(e);
+    if(!pm) return;
+    controls.enabled = false;
+    drag = { pm, sx: e.clientX, sy: e.clientY, active: false };
+  }, true);
+  window.addEventListener('pointermove', e => {
+    if(!drag) return;
+    if(!drag.active){
+      if(Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 6) return;
+      drag.active = true; el.style.cursor = 'grabbing';
+      const lp = computeLayout(placedModules).get(drag.pm);
+      const pt = planePoint(e, lp.z);
+      drag.off = pt ? { x: lp.x - pt.x, y: lp.y - pt.y } : { x: 0, y: 0 };
+    }
+    const lp = computeLayout(placedModules).get(drag.pm);
+    const pt = planePoint(e, lp.z);
+    if(!pt) return;
+    drag.cx = pt.x + drag.off.x; drag.cy = pt.y + drag.off.y;
+    retarget(drag.pm, drag.cx, drag.cy);
+    queueRebuild();
+  });
+  const end = e => {
+    if(!drag) return;
+    const d = drag; drag = null;
+    controls.enabled = true; el.style.cursor = '';
+    if(d.active){ refreshAll(); }
+    else if(e.type === 'pointerup'){ const i = placedModules.indexOf(d.pm); if(i >= 0) removeModule(i); }
+  };
+  window.addEventListener('pointerup', end);
+  window.addEventListener('pointercancel', end);
 }
 
 function onResize(){
@@ -1620,7 +1770,7 @@ function onResize(){
 
 function animate(){
   requestAnimationFrame(animate);
-  if(autoRotate) cabinetGroup.rotation.y += 0.006;
+  if(autoRotate && !(drag && drag.active)) cabinetGroup.rotation.y += 0.006;
   controls.update();
   renderer.render(scene, camera);
 }
