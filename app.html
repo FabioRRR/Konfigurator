@@ -251,14 +251,16 @@
   .duct-note{font-size:11.5px; color:var(--muted); line-height:1.5; margin-bottom:10px;}
   .duct-btn{border:1px solid #1B5FD6; background:#1B5FD6; color:#fff; border-radius:7px; padding:7px 11px; font-size:12px; font-weight:600; cursor:pointer; margin-bottom:10px;}
   .duct-btn.cancel{background:#fff; color:#1B5FD6;}
-  .duct-row{display:flex; align-items:center; gap:7px; padding:6px 8px; border:1px solid var(--line); border-radius:7px; margin-bottom:5px; background:#fff; font-size:12px; cursor:pointer;}
+  .duct-row{display:flex; align-items:center; gap:4px; padding:6px 6px; border:1px solid var(--line); border-radius:7px; margin-bottom:5px; background:#fff; font-size:12px; cursor:pointer;}
   .duct-row.sel{border-color:#1B5FD6; background:#E8F0FD;}
   .duct-row.bad{border-color:#E7A39B;}
-  .duct-row b{min-width:34px; color:var(--navy);}
-  .duct-row input{width:68px; padding:4px 6px; border:1px solid var(--line); border-radius:6px; font-family:var(--mono); font-size:12px;}
+  .duct-row{flex-wrap:wrap; row-gap:5px;}
+  .duct-row > *{flex-shrink:0;}
+  .duct-row b{min-width:28px; color:var(--navy);}
+  .duct-row input{width:54px; padding:4px 6px; border:1px solid var(--line); border-radius:6px; font-family:var(--mono); font-size:12px;}
   .duct-row button{border:1px solid var(--line); background:#fff; border-radius:6px; width:24px; height:24px; cursor:pointer; font-size:12px; color:var(--navy);}
   .duct-row button:disabled{opacity:.35; cursor:default;}
-  .duct-row .x{color:#C0392B; margin-left:auto;}
+  .duct-row .x{color:#C0392B; margin-left:auto; border-color:#F0C9C4;}
   .duct-row small{color:#C0392B;}
   .duct-tag{position:absolute; transform:translate(-50%,-50%); background:#fff; color:#0B2A52; border:1px solid #9CA6B2; border-radius:5px; padding:1px 6px; font:600 10.5px var(--mono); white-space:nowrap; pointer-events:none; box-shadow:0 1px 4px rgba(0,0,0,.2);}
   .duct-tag.bad{border-color:#C0392B; color:#C0392B;}
@@ -1331,8 +1333,8 @@ function renderDuctPlanner(){
     <button type="button" class="duct-btn ${ductMode ? 'cancel' : ''}" id="duct-start">${ductMode ? 'Abbrechen' : '＋ Kabelkanal platzieren'}</button>
     <button type="button" class="duct-btn cancel" id="duct-flush-all" ${ducts.some(ductNeedsFlush) ? '' : 'disabled'} title="Alle Kanäle bündig aneinander anschließen">⇥ Alle bündig anschließen</button>
     ${ducts.map(d => `<div class="duct-row ${d.id === activeDuct ? 'sel' : ''} ${ductHitsBin(d) ? 'bad' : ''}" data-d="${d.id}">
-        <b>${d.name}</b><span>${d.orient === 'H' ? 'waagrecht' : 'senkrecht'}</span>
-        <input type="number" min="50" step="10" value="${Math.round(d.len * 100)}" data-len="${d.id}"><span>mm</span>
+        <b>${d.name}</b><span title="${d.orient === 'H' ? 'waagrecht' : 'senkrecht'}" style="font-size:15px;">${d.orient === 'H' ? '↔' : '↕'}</span>
+        <span style="white-space:nowrap;"><input type="number" min="50" step="10" value="${Math.round(d.len * 100)}" data-len="${d.id}"> mm</span>
         <button type="button" data-flush="${d.id}" title="Bündig anschließen" ${ductNeedsFlush(d) ? '' : 'disabled'}>⇥</button>
         <button type="button" class="x" data-del="${d.id}" title="Entfernen">✕</button>
         ${ductHitsBin(d) ? '<small title="Kabelkanal überschneidet einen Bin">⚠ kollidiert</small>' : ''}
