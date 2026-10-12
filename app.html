@@ -685,7 +685,7 @@ const enclosureConfigs = {
       bins: '2 DIN-Schienenreihen, 6 Modulplätze je Reihe — 12 Plätze gesamt.',
     },
     moduleTypes: [
-      { id:'qs', name:'Q.station X — Controller', desc:'Ethernet-Controller & Edge-Verarbeitung', color:'#0B2A52', price:1450 },
+      { id:'qs', name:'Q.station X', article:'561828', stepModel:'qs', first:true, unique:true, desc:'Controller & Edge-Verarbeitung – steht immer am Anfang der Modulreihe, nur einmal pro Konfiguration', color:'#0B2A52', price:1450 },
       { id:'a101', name:'Q.bloxx-X A101', article:'544223', stepModel:'a101', desc:'Messmodul für DIN-Schiene mit zwei steckbaren Klemmenblöcken und Status-LEDs A/B/C', color:'#1B5FD6', price:690 },
       { id:'a104', name:'Q.bloxx-X A104 TCK', article:'556731', stepModel:'a104', desc:'Messmodul für DIN-Schiene, Variante TCK, mit steckbaren Klemmenblöcken und Status-LEDs', color:'#1B5FD6', price:690 },
       { id:'a111', name:'Q.bloxx-X A111 BNC', article:'556832', stepModel:'a111', desc:'Messmodul für DIN-Schiene, Variante BNC, mit BNC-Anschlüssen und Status-LEDs', color:'#1B5FD6', price:690 },
@@ -860,7 +860,7 @@ function renderRightPanel(){
       rpBody.innerHTML = placedModules.map((pm, idx) => {
         const m = MODULE_TYPES.find(x => x.id === pm.id);
         return `
-          <div class="bom-row" draggable="true" data-idx="${idx}">
+          <div class="bom-row" draggable="${m.first ? 'false' : 'true'}" data-idx="${idx}">
             <span class="bom-grip" title="Ziehen zum Umordnen">⋮⋮</span>
             <div class="module-swatch" style="background:${m.color};"></div>
             <div class="bom-name">${m.name}<small>${currentEnclosure === 'cabinet' ? 'Schiene ' + ((pm.row||0)+1) + ' · ' : ''}Pos. ${idx + 1} · ${m.article ? 'Art.-Nr. ' + m.article : 'Best.-Nr. GI-' + m.id.toUpperCase() + '-X'}</small></div>
@@ -924,6 +924,20 @@ function addModule(id){
   const m = MODULE_TYPES.find(x => x.id === id);
   const full = () => alert('Alle Modulplätze sind belegt. Erhöhen Sie die Bin-Größe im Schritt „Bins / Einschübe“.');
   if(placedModules.length >= TOTAL_SLOTS){ full(); return; }
+  if(m.unique && placedModules.some(pm => pm.id === id)){ alert(m.name + ' kann nur einmal pro Konfiguration verwendet werden.'); return; }
+  if(m.first){                       // steht immer ganz am Anfang (oberste Reihe, ganz links)
+    placedModules.unshift({ id, row: 0 });
+    // Überlauf der obersten Reihe nach unten schieben
+    while(currentEnclosure === 'cabinet' && rowUsed(0) > RAIL_W + 1e-6){
+      let last = -1; placedModules.forEach((pm,i) => { if((pm.row||0) === 0 && pm.id !== id) last = i; });
+      const mv = placedModules[last];
+      if(rowUsed(1) + modWidth(typeOf(mv)) > RAIL_W + 1e-6){ placedModules.shift(); full(); return; }
+      placedModules.splice(last, 1); mv.row = 1;
+      const first1 = placedModules.findIndex(pm => (pm.row||0) === 1);
+      placedModules.splice(first1 < 0 ? placedModules.length : first1, 0, mv);
+    }
+    refreshAll(); return;
+  }
   let row = 0;
   if(currentEnclosure === 'cabinet'){
     const w = modWidth(m);
@@ -940,6 +954,8 @@ function addModule(id){
 function moveModule(fromIdx, toIdx){
   if(fromIdx === toIdx) return;
   const pm = placedModules[fromIdx], target = placedModules[toIdx];
+  if(typeOf(pm).first) return;                                   // Station bleibt vorne
+  if(typeOf(target).first && toIdx < fromIdx) return;            // nichts vor die Station
   if(currentEnclosure === 'cabinet' && (target.row||0) !== (pm.row||0)){
     if(rowUsed(target.row||0, pm) + modWidth(typeOf(pm)) > RAIL_W + 1e-6) return;
     pm.row = target.row;
@@ -1706,7 +1722,8 @@ function retarget(pm, cx, cy){
     if(rowUsed(row, pm) + modWidth(typeOf(pm)) > RAIL_W + 1e-6) row = pm.row || 0;
     const lay = computeLayout(others);
     const inRow = others.filter(q => (q.row||0) === row);
-    const k = inRow.filter(q => lay.get(q).x < cx).length;
+    let k = inRow.filter(q => lay.get(q).x < cx).length;
+    if(inRow.length && typeOf(inRow[0]).first) k = Math.max(k, 1);   // hinter der Station
     pm.row = row;
     at = k < inRow.length ? others.indexOf(inRow[k])
        : inRow.length ? others.indexOf(inRow[inRow.length - 1]) + 1 : others.length;
@@ -1730,6 +1747,7 @@ function initModuleDrag(){
     if(e.button !== 0) return;
     const pm = pickModule(e);
     if(!pm) return;
+    if(typeOf(pm).first) return;                       // Station ist fixiert (Klick = entfernen bleibt)
     controls.enabled = false;
     drag = { pm, sx: e.clientX, sy: e.clientY, active: false };
   }, true);

@@ -9,3 +9,4 @@ Gantner Instruments – Kunden-Konfigurator (Dashboard → Projekttyp → 3D-Kon
 - `tools/models/a101.gmod.json` – Q.bloxx-X A101 (Art.-Nr. 544223)
 - `tools/models/a104.gmod.json` – Q.bloxx-X A104 TCK (Art.-Nr. 556731)
 - `tools/models/a111.gmod.json` – Q.bloxx-X A111 BNC (Art.-Nr. 556832)
+- `tools/models/qs.gmod.json` – Q.station X (Art.-Nr. 561828), steht immer am Anfang, nur einmal
