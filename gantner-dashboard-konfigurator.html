@@ -1489,7 +1489,7 @@ function computeLayout(list){
     list.forEach(pm => {
       const m = typeOf(pm), w = BX.phW * 0.01, sm = m.stepModel && window.STEP_MODELS && window.STEP_MODELS[m.stepModel];
       // Frontplatte (30,5 mm, im Modell um 1,7 mm nach links versetzt) füllt genau das Raster; Unterkante liegt auf der Unterkante der Griffe (y = 0)
-      out.set(pm, { x: cur + w/2 + 0.017, y: (sm ? sm.sizeMM[1] : 143.7) * 0.005, z: BX.z0 + (BX.frontMM - (sm ? sm.sizeMM[2] : 137)) * MM_TO_UNIT, row: 0 });
+      out.set(pm, { x: cur + w/2 + 0.017, y: ((sm ? sm.sizeMM[1] : 143.7) * 0.5 - BX.tabMM) * 0.01, z: BX.z0 + (BX.frontMM - (sm ? sm.sizeMM[2] : 137)) * MM_TO_UNIT, row: 0 });
       cur += w;
     });
   } else {
@@ -1838,7 +1838,7 @@ function buildRaxxShell(shell){
 }
 
 /* ---------- Q.brixx-X System: Modulreihe zwischen zwei Griffen (STEP), Platzhalter-Modul solange leer ---------- */
-const BX = { Hmm:137, Dmm:173.5, frontMM:173.4, handleInnerMM:15.2, phW:30.4 };
+const BX = { Hmm:137, Dmm:173.5, frontMM:173.4, handleInnerMM:15.2, tabMM:5.9, phW:30.4 };
 BX.z0 = -BX.Dmm / 2 * 0.01;
 function brixxStackWmm(){ return Math.max(1, placedModules.length) * BX.phW; }          // Raster 30,4 mm = Innenabstand der Griffe
 function updateBrixxInfo(){
