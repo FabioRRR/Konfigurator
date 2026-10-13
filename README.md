@@ -11,6 +11,7 @@ Gantner Instruments – Kunden-Konfigurator (Dashboard → Projekttyp → 3D-Kon
 - `tools/models/a111.gmod.json` – Q.bloxx-X A111 BNC (Art.-Nr. 556832)
 - `tools/models/qs.gmod.json` – Q.station X (Art.-Nr. 561828), steht immer am Anfang, nur einmal
 - `tools/models/a128.gmod.json` – Q.bloxx-X A128 (Art.-Nr. 565327)
+- `tools/models/bx_handle_l|bx_handle_r|bx_ph.gmod.json` – Q.brixx-X System (Station incl. Griffe): linker/rechter Griff und Platzhalter-Modul (aus einer STEP geteilt mit `tools/split_brixx.py`)
 - `tools/models/a105.gmod.json` – Q.bloxx-X A105 DB15 (Art.-Nr. 563628)
 - `tools/models/cab_1034|1050|1059.gmod.json` – Schaltschrank-Varianten für die Hardware-Auswahl (Typ 1034.000 / 1050.000 / 1059.000)
 - weitere Schrank-Varianten: `cab_1033500`, `cab_1380`, `cab_1350`, `cab_1376`, `cab_1091` (Hardware-Auswahl, 8 Varianten gesamt)
@@ -26,5 +27,6 @@ Funktionsumfang des Schaltschrank-Konfigurators:
 - Hinweissymbol „Fehlende UART-Definition“ je Modul ohne UART
 - Ansichtsfilter (UART, Modultyp; Funktion folgt)
 - Kabelkanal-Platzierung (25 × 40 mm, waagrecht/senkrecht): Zeichnen mit der Maus, Beschriftung KK1…, Länge änderbar, Drag&Drop, bündiges Einrasten/Anschließen und Kreuzungsauflösung
+- Q.brixx-X System: zwei Griffe (STEP) außen, Platzhalter-Modul (ausgeblendet) bis zum ersten Modul, bis 20 Module, Griffe wandern mit der Modulanzahl nach außen
 
 Offene Platzhalter: Preise, Beschreibungen/Modulinfos, Leistungswerte, Schrank-Innenmaße-Annahmen (Randabstände, Reihenabstand), Kabelkanal-Orientierung (25 breit / 40 tief).

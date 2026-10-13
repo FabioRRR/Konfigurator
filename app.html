@@ -734,7 +734,7 @@ function showView(name, enclosureType){
 const projectTypes = [
   { key:'schaltschrank', title:'Schaltschrank', desc:'Modulare Messtechnik für den Einbau in Schaltschränke.', kind:'cabinet', enclosure:'cabinet' },
   { key:'rack', title:'19″ Rack', desc:'19-Zoll Einschubsysteme für zentrale Messwerterfassung.', kind:'rack', enclosure:'raxx' },
-  { key:'brixx', title:'Q.brixx', desc:'Individuell stapelbare Module für portable Messaufbauten.', kind:'brixx', enclosure:'brixx' },
+  { key:'brixx', title:'Q.brixx-X System', desc:'Individuell stapelbare Module für portable Messaufbauten.', kind:'brixx', enclosure:'brixx' },
   { key:'pruefstand', title:'Prüfstand', desc:'Robuste Lösungen für Prüfstände und anspruchsvolle Umgebungen.', kind:'pruefstand', enclosure:'cabinet' },
   { key:'sonder', title:'Sonderlösung', desc:'Individuelle Systeme für spezielle Anforderungen.', kind:'custom', enclosure:'cabinet' },
 ];
@@ -911,26 +911,24 @@ const enclosureConfigs = {
     },
   },
   brixx: {
-    bauformLabel: 'Q.brixx',
-    projectSuffix: 'Prüfstand Bremssystem — Q.brixx',
+    bauformLabel: 'Q.brixx-X System',
+    projectSuffix: 'Prüfstand Bremssystem — Q.brixx-X System',
     ipLabel: 'IP20',
-    dimsLabel: '190×175×160 mm (kompakte Baugruppe)',
-    totalSlots: 3,
+    dimsLabel: '190×137×174 mm (kompakte Baugruppe)',
+    totalSlots: 20,
     weightBase: 1.1, weightPerModule: 0.35,
-    powerPerModule: 3.4, powerMax: 24,
+    powerPerModule: 4.8, powerMax: 100,
     priceFixedItems: [ {label:'Tragegriffe & Montagerahmen', value:180}, {label:'Engineering', value:420} ],
     stepsMeta: {
-      gehaeuse: 'Q.brixx — kompakte Baugruppe mit integrierten Tragegriffen, fix 3 Steckplätze.',
-      bins: '1 Modulreihe zwischen zwei integrierten Tragegriffen.',
+      gehaeuse: 'Q.brixx-X System — Modulreihe zwischen zwei Tragegriffen, bis zu 20 Module. Die Griffe wandern mit der Modulanzahl nach außen.',
+      bins: 'Eine Modulreihe zwischen zwei Griffen (kein Bin-Raster nötig).',
     },
     moduleTypes: [
       { id:'ctrl', name:'Q.station — Controller', desc:'Ethernet, USB, CAN, SYNC, Display, Power (M12)', color:'#C9CDD3', price:1490 },
       { id:'led', name:'Blindmodul mit Status-LEDs', desc:'Reservemodul mit LED-Statusanzeige A/B/C', color:'#D7DBE0', price:120 },
       { id:'bnc', name:'BNC/Terminalblock-Kombimodul', desc:'4-Kanal BNC-Messeingänge kombiniert mit Schraubklemmen', color:'#CBD0D6', price:640 },
     ],
-    defaultModules: [
-      {id:'ctrl', slot:0}, {id:'led', slot:1}, {id:'bnc', slot:2},
-    ],
+    defaultModules: [],
     cameraPresets: {
       iso:{ pos:[5.6,3.3,6.2], look:[0,0.95,0] },
       front:{ pos:[0,1.15,6.8], look:[0,0.95,0] },
@@ -939,6 +937,7 @@ const enclosureConfigs = {
   },
 };
 
+enclosureConfigs.brixx.moduleTypes = enclosureConfigs.cabinet.moduleTypes;       // Q.brixx-X System nutzt dieselben Module
 let currentEnclosure = 'cabinet';
 let MODULE_TYPES = enclosureConfigs.cabinet.moduleTypes;
 let placedModules = [];
@@ -1189,10 +1188,10 @@ function renderFilter(){
   host.querySelectorAll('[data-u]').forEach(b => b.onclick = () => { viewFilter.uart = parseInt(b.dataset.u); renderFilter(); if(sceneInited) rebuildModulesIn3D(); });
   host.querySelector('#vf-type').onchange = e => { viewFilter.type = e.target.value; if(sceneInited) rebuildModulesIn3D(); };
 }
-function dimGroup(g){
+function dimGroup(g, opacity){
   g.traverse(n => {
     if(!n.isMesh) return;
-    const conv = mt => { const c = mt.clone(); c.userData = {}; c.transparent = true; c.opacity = 0.13; c.depthWrite = false; if(c.color) c.color.lerp(new THREE.Color(0xB8C2CE), 0.7); if(c.emissive) c.emissive.set(0x000000); return c; };
+    const conv = mt => { const c = mt.clone(); c.userData = {}; c.transparent = true; c.opacity = opacity || 0.13; c.depthWrite = false; if(c.color) c.color.lerp(new THREE.Color(0xB8C2CE), 0.7); if(c.emissive) c.emissive.set(0x000000); return c; };
     n.material = Array.isArray(n.material) ? n.material.map(conv) : conv(n.material);
     n.castShadow = false;
   });
@@ -1485,6 +1484,13 @@ function computeLayout(list){
       out.set(pm, { x: rc.x0 + cur[b.id] + w/2, y: rc.y, z: CAB_Z, row: b.row });
       cur[b.id] += w;
     });
+  } else if(currentEnclosure === 'brixx'){
+    let cur = -brixxStackWmm() * 0.005;
+    list.forEach(pm => {
+      const m = typeOf(pm), w = modWidth(m), sm = m.stepModel && window.STEP_MODELS && window.STEP_MODELS[m.stepModel];
+      out.set(pm, { x: cur + w/2, y: BX.Hmm * 0.005, z: BX.z0 + (BX.frontMM - (sm ? sm.sizeMM[2] : 137)) * MM_TO_UNIT, row: 0 });
+      cur += w;
+    });
   } else {
     const sp = getSlotPositions(currentEnclosure);
     list.forEach((pm, i) => out.set(pm, { ...sp[Math.min(i, sp.length-1)], row: 0 }));
@@ -1599,7 +1605,7 @@ document.getElementById('confirm-overlay').addEventListener('click', e => { if(e
 document.getElementById('confirm-ok').addEventListener('click', () => { const cb = confirmCb; closeConfirm(); if(cb) cb(); });
 document.addEventListener('keydown', e => { if(e.key === 'Escape'){ closeConfirm(); if(ductMode) cancelDuctMode(); } });
 document.getElementById('reset-all').addEventListener('click', resetAllModules);
-function refreshAll(){ if(currentEnclosure === 'cabinet') TOTAL_SLOTS = binsCapacity(); renderRightPanel(); refreshSummary(); renderFilter(); renderBinPlanner(); renderDuctPlanner(); syncStepFlags(); if(sceneInited) rebuildModulesIn3D(); }
+function refreshAll(){ if(currentEnclosure === 'cabinet') TOTAL_SLOTS = binsCapacity(); updateBrixxInfo(); renderRightPanel(); refreshSummary(); renderFilter(); renderBinPlanner(); renderDuctPlanner(); syncStepFlags(); if(sceneInited){ rebuildModulesIn3D(); fitBrixxView(); } }
 
 /* =========================================================
    THREE.JS SCENE — zwei Gehäusevarianten: Schaltschrank & 19″ Rack (raxx)
@@ -1716,6 +1722,7 @@ function buildCabinetShell(shell){
 function rebuildBins3D(){
   if(!binGroup) return;
   while(binGroup.children.length){ const c = binGroup.children[0]; binGroup.remove(c); disposeTree(c); }
+  if(currentEnclosure === 'brixx'){ rebuildBrixx3D(); return; }
   if(currentEnclosure !== 'cabinet') return;
   // (Kabelkanäle werden am Ende dieser Funktion gezeichnet)
   const railMat = new THREE.MeshStandardMaterial({ color:0x9CA6B2, roughness:0.4, metalness:0.6 });
@@ -1829,7 +1836,42 @@ function buildRaxxShell(shell){
   }
 }
 
-/* ---------- Q.brixx: kompakte Baugruppe mit integrierten Tragegriffen links/rechts ---------- */
+/* ---------- Q.brixx-X System: Modulreihe zwischen zwei Griffen (STEP), Platzhalter-Modul solange leer ---------- */
+const BX = { Hmm:137, Dmm:173.5, frontMM:173.4, handleInnerMM:15.2, phW:30.4 };
+BX.z0 = -BX.Dmm / 2 * 0.01;
+function brixxStackWmm(){ return placedModules.length ? placedModules.reduce((s, pm) => s + modWidth(typeOf(pm)) * 100, 0) : BX.phW; }
+function updateBrixxInfo(){
+  if(currentEnclosure !== 'brixx') return;
+  const w = brixxStackWmm(), total = w + 2 * 39.8, cfg = enclosureConfigs.brixx;
+  cfg.dimsLabel = `${Math.round(total)}×${Math.round(BX.Hmm)}×${Math.round(BX.Dmm)} mm`;
+  const el = document.getElementById('sum-dims'); if(el) el.textContent = cfg.dimsLabel;
+  const D = (total * 0.01 / 2) / (Math.tan(18 * Math.PI/180) * 1.2) * 1.5 + 1.0, ty = BX.Hmm * 0.005;
+  cfg.cameraPresets = {
+    iso:  { pos:[D*0.62, ty + D*0.34, D*0.78], look:[0, ty, 0] },
+    front:{ pos:[0, ty, D], look:[0, ty, 0] },
+    side: { pos:[D, ty, 0], look:[0, ty, 0] },
+  };
+}
+let bxLastFit = 0;
+function fitBrixxView(){
+  if(currentEnclosure !== 'brixx' || !camera) return;
+  const need = enclosureConfigs.brixx.cameraPresets.iso, dNeed = new THREE.Vector3(...need.pos).distanceTo(new THREE.Vector3(...need.look));
+  const cur = camera.position.distanceTo(controls.target);
+  if(cur < dNeed * 0.97 && dNeed > bxLastFit){ const dir = camera.position.clone().sub(controls.target).normalize(); animateCamera(controls.target.clone().add(dir.multiplyScalar(dNeed)), controls.target.clone()); }
+  bxLastFit = dNeed;
+}
+function rebuildBrixx3D(){
+  const w = brixxStackWmm(), shift = (w / 2 - BX.handleInnerMM) * MM_TO_UNIT;
+  [['bx_handle_l', -1], ['bx_handle_r', 1]].forEach(([id, dir]) => {
+    const g = makeStepGroup(id, true); if(!g) return;
+    g.position.set(dir * shift, 0, BX.z0); binGroup.add(g);
+  });
+  if(!placedModules.length){                                  // Platzhalter-Modul (ausgeblendet), wird durch das erste gewählte Modul überschrieben
+    const ph = makeStepGroup('bx_ph', false);
+    if(ph){ ph.position.set(0, 0, BX.z0); dimGroup(ph, 0.3); binGroup.add(ph); }
+  }
+}
+/* (alt) Q.brixx: kompakte Baugruppe mit integrierten Tragegriffen links/rechts ---------- */
 const BRIXX_DIMS = (() => {
   const slotW = 0.66, count = 3, moduleH = 1.9, D = 1.6, handleW = 0.62;
   const stackW = slotW * count;
@@ -1876,42 +1918,7 @@ function buildHandle(shell, xSide, mat, ribMat){
   shell.add(group);
 }
 
-function buildBrixxShell(shell){
-  const bodyMat = new THREE.MeshStandardMaterial({ color:0xD3D7DC, roughness:0.42, metalness:0.35 });
-  const ribMat = new THREE.MeshStandardMaterial({ color:0x9CA6B2, roughness:0.35, metalness:0.55 });
-  const footMat = new THREE.MeshStandardMaterial({ color:0x6B7480, roughness:0.6, metalness:0.2 });
-  const { stackW, moduleH, D, handleW } = BRIXX_DIMS;
-
-  // ridged top cover spanning from handle to handle (parallel fins, as seen in the reference photos)
-  const lidW = stackW + handleW*2;
-  const lid = new THREE.Mesh(new THREE.BoxGeometry(lidW, 0.05, D*0.96), bodyMat);
-  lid.position.set(0, moduleH, 0);
-  lid.castShadow = true;
-  shell.add(lid);
-  const finCount = 5;
-  for(let i=0;i<finCount;i++){
-    const fx = -lidW/2 + (i+0.5)*(lidW/finCount);
-    const fin = new THREE.Mesh(new THREE.BoxGeometry(lidW/finCount*0.62, 0.035, D*0.9), ribMat);
-    fin.position.set(fx, moduleH + 0.045, 0);
-    shell.add(fin);
-  }
-
-  // base plate + small feet
-  const base = new THREE.Mesh(new THREE.BoxGeometry(lidW, 0.05, D*0.96), bodyMat);
-  base.position.set(0, 0.02, 0);
-  base.receiveShadow = true;
-  shell.add(base);
-  for(const fx of [-lidW/2+0.25, lidW/2-0.25]){
-    for(const fz of [-D*0.35, D*0.35]){
-      const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.07,0.05,14), footMat);
-      foot.position.set(fx, -0.01, fz);
-      shell.add(foot);
-    }
-  }
-
-  buildHandle(shell, -1, bodyMat, ribMat);
-  buildHandle(shell, 1, bodyMat, ribMat);
-}
+function buildBrixxShell(shell){ /* Griffe und Platzhalter werden in rebuildBrixx3D() gezeichnet */ }
 
 function getSlotPositions(type){
   if(type === 'raxx'){
@@ -2532,7 +2539,7 @@ function rebuildModulesIn3D(){
     if(drag && drag.active && drag.pm === pm && drag.cx !== undefined){
       p = { ...p, x: drag.cx, y: drag.cy, z: p.z + 0.3 };   // angehoben, folgt dem Mauszeiger
     }
-    const stepGroup = (m.stepModel && currentEnclosure === 'cabinet') ? buildStepModuleMesh(m, p, idx) : null;
+    const stepGroup = (m.stepModel && (currentEnclosure === 'cabinet' || currentEnclosure === 'brixx')) ? buildStepModuleMesh(m, p, idx) : null;
     const group = stepGroup ? stepGroup : currentEnclosure === 'raxx'
       ? buildRaxxModuleMesh(m, p, idx)
       : currentEnclosure === 'brixx'
@@ -2594,6 +2601,10 @@ function retarget(pm, cx, cy){
     pm.bin = tb.id;
     at = k < inBin.length ? others.indexOf(inBin[k])
        : inBin.length ? others.indexOf(inBin[inBin.length - 1]) + 1 : others.length;
+  } else if(currentEnclosure === 'brixx'){
+    const lay = computeLayout(others);
+    at = others.filter(q => lay.get(q).x < cx).length;
+    if(others.length && typeOf(others[0]).first) at = Math.max(at, 1);
   } else {
     const sp = getSlotPositions(currentEnclosure);
     at = 0; let best = Infinity;
