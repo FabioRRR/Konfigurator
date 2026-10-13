@@ -1864,11 +1864,11 @@ function rebuildBrixx3D(){
   const w = brixxStackWmm(), shift = (w / 2 - BX.handleInnerMM) * MM_TO_UNIT;
   [['bx_handle_l', -1], ['bx_handle_r', 1]].forEach(([id, dir]) => {
     const g = makeStepGroup(id, true); if(!g) return;
-    g.position.set(dir * shift, 0, BX.z0); binGroup.add(g);
+    g.rotation.y = Math.PI; g.position.set(-dir * shift, 0, -BX.z0); binGroup.add(g);       // um 180° gedreht (Hochachse)
   });
   if(!placedModules.length){                                  // Platzhalter-Modul (ausgeblendet), wird durch das erste gewählte Modul überschrieben
     const ph = makeStepGroup('bx_ph', false);
-    if(ph){ ph.position.set(0, 0, BX.z0); dimGroup(ph, 0.3); binGroup.add(ph); }
+    if(ph){ ph.rotation.y = Math.PI; ph.position.set(0, 0, -BX.z0); dimGroup(ph, 0.3); binGroup.add(ph); }
   }
 }
 /* (alt) Q.brixx: kompakte Baugruppe mit integrierten Tragegriffen links/rechts ---------- */
