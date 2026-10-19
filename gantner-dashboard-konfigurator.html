@@ -1003,7 +1003,7 @@ function renderSteps(){
 }
 function renderBinPlanner(){
   const host = document.getElementById('bin-planner'); if(!host) return;
-  const hw = Math.floor(halfW() / 0.36 + 1e-6);
+  const hw = Math.floor(halfW() / MOD_PITCH + 1e-6);
   const sel = binById(activeBin);
   let grid = '';
   for(let r = 0; r < CAB.rows; r++){
@@ -1196,9 +1196,10 @@ function dimGroup(g, opacity){
     n.castShadow = false;
   });
 }
+const MOD_PITCH = 0.305;
 function modWidth(m){
   const sm = m.stepModel && window.STEP_MODELS && window.STEP_MODELS[m.stepModel];
-  return sm ? sm.sizeMM[0] * 0.01 : 0.36;
+  return MOD_PITCH;                                   // Frontplatte 30,5 mm: Module liegen Seite an Seite
 }
 /* ---------- Bins / Einschübe (nur Schaltschrank) ----------
    Raster: CAB.rows Reihen × 2 Hälften (L/R). Ganzer Bin = beide Hälften einer Reihe, halber Bin = eine Hälfte. */
@@ -1391,7 +1392,7 @@ function binRect(b){
   const x0 = b.size === 'full' || b.side === 'L' ? -RAIL_W/2 : RAIL_W/2 - w;
   return { x0, x1: x0 + w, w, y: RAIL_ROWS_Y[b.row] };
 }
-function binCap(b){ return Math.floor(binRect(b).w / 0.36 + 1e-6); }
+function binCap(b){ return Math.floor(binRect(b).w / MOD_PITCH + 1e-6); }
 function binById(id){ return bins.find(b => b.id === id) || null; }
 function binsSorted(){ return bins.slice().sort((a, b) => a.row - b.row || (a.size === 'full' ? 0 : a.side === 'L' ? 0 : 1) - (b.size === 'full' ? 0 : b.side === 'L' ? 0 : 1) || 0); }
 function binNo(b){ return binsSorted().indexOf(b) + 1; }
@@ -1488,7 +1489,7 @@ function computeLayout(list){
       if(!b){ out.set(pm, { x:0, y:-50, z:CAB_Z, row:0 }); return; }
       const rc = binRect(b); cur[b.id] = cur[b.id] || 0;
       if(cur[b.id] > 0) cur[b.id] += gapOf(pm);
-      out.set(pm, { x: rc.x0 + cur[b.id] + w/2, y: rc.y, z: CAB_Z, row: b.row });
+      out.set(pm, { x: rc.x0 + cur[b.id] + w/2 + 0.017, y: rc.y, z: CAB_Z, row: b.row });   // Frontplatte liegt im Modell 1,7 mm links der Mitte
       cur[b.id] += w;
     });
   } else if(currentEnclosure === 'brixx'){
