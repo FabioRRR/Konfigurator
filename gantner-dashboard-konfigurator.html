@@ -695,7 +695,7 @@
     </div>
     <div class="info-body" id="info-body"></div>
     <div class="info-foot">
-      <div class="grp"><button id="info-view">3D ansehen</button><button class="danger" id="info-delete">Modul löschen</button></div>
+      <div class="grp"><button id="info-view">3D ansehen</button><button id="info-detach" style="display:none;">Entkoppeln</button><button class="danger" id="info-delete">Modul löschen</button></div>
       <div class="grp"><button id="info-select" class="btn-primary" style="display:none; padding:8px 14px; font-size:13px;">Diese Hardware wählen</button><button id="info-save" class="btn-primary" style="padding:8px 14px; font-size:13px;">Speichern</button><button id="info-ok">Schließen</button></div>
     </div>
   </div>
@@ -1397,7 +1397,13 @@ function binsSorted(){ return bins.slice().sort((a, b) => a.row - b.row || (a.si
 function binNo(b){ return binsSorted().indexOf(b) + 1; }
 function binLabel(b){ return `Bin ${binNo(b)} (${b.size === 'full' ? 'ganz' : 'halb'})`; }
 function binsCapacity(){ return bins.reduce((s, b) => s + binCap(b), 0); }
-function binUsed(b, exclude){ return placedModules.reduce((s, pm) => (pm !== exclude && pm.bin === b.id) ? s + modWidth(typeOf(pm)) : s, 0); }
+const DETACH_GAP = 0.6;                       // Startabstand eines entkoppelten Moduls (60 mm)
+function gapOf(pm){ return pm && pm.gap > 0 ? pm.gap : 0; }   // Abstand zum linken Nachbarn (0 = angekoppelt)
+function hasLeftNeighbour(pm){
+  const i = placedModules.indexOf(pm); if(i <= 0) return false;
+  return currentEnclosure === 'cabinet' ? placedModules.slice(0, i).some(q => q.bin === pm.bin) : true;
+}
+function binUsed(b, exclude){ return placedModules.reduce((s, pm) => (pm !== exclude && pm.bin === b.id) ? s + modWidth(typeOf(pm)) + gapOf(pm) : s, 0); }
 function binHasRoom(b, w, exclude){ return binUsed(b, exclude) + w <= binRect(b).w + 1e-6; }
 function binCount(b){ return placedModules.filter(pm => pm.bin === b.id).length; }
 function occupant(row, side, ignore){
@@ -1481,12 +1487,14 @@ function computeLayout(list){
       const b = binById(pm.bin), w = modWidth(typeOf(pm));
       if(!b){ out.set(pm, { x:0, y:-50, z:CAB_Z, row:0 }); return; }
       const rc = binRect(b); cur[b.id] = cur[b.id] || 0;
+      if(cur[b.id] > 0) cur[b.id] += gapOf(pm);
       out.set(pm, { x: rc.x0 + cur[b.id] + w/2, y: rc.y, z: CAB_Z, row: b.row });
       cur[b.id] += w;
     });
   } else if(currentEnclosure === 'brixx'){
-    let cur = -brixxStackWmm() * 0.005;
-    list.forEach(pm => {
+    let cur = -brixxStackWmm(list) * 0.005;
+    list.forEach((pm, li) => {
+      if(li > 0) cur += gapOf(pm) ;
       const m = typeOf(pm), w = BX.phW * 0.01, sm = m.stepModel && window.STEP_MODELS && window.STEP_MODELS[m.stepModel];
       // Frontplatte (30,5 mm, im Modell um 1,7 mm nach links versetzt) füllt genau das Raster; Unterkante liegt auf der Unterkante der Griffe (y = 0)
       out.set(pm, { x: cur + w/2 + 0.017, y: ((sm ? sm.sizeMM[1] : 143.7) * 0.5 - BX.tabMM) * 0.01, z: BX.z0, row: 0 });
@@ -1840,7 +1848,7 @@ function buildRaxxShell(shell){
 /* ---------- Q.brixx-X System: Modulreihe zwischen zwei Griffen (STEP), Platzhalter-Modul solange leer ---------- */
 const BX = { Hmm:137, Dmm:173.5, frontMM:173.4, handleInnerMM:15.2, tabMM:5.9, phW:30.4 };
 BX.z0 = -BX.Dmm / 2 * 0.01;
-function brixxStackWmm(){ return Math.max(1, placedModules.length) * BX.phW; }          // Raster 30,4 mm = Innenabstand der Griffe
+function brixxStackWmm(list){ list = list || placedModules; return Math.max(1, list.length) * BX.phW + list.reduce((s, pm, i) => s + (i > 0 ? gapOf(pm) * 100 : 0), 0); }          // Raster 30,4 mm = Innenabstand der Griffe
 function updateBrixxInfo(){
   if(currentEnclosure !== 'brixx') return;
   const w = brixxStackWmm(), total = w + 2 * 39.8, cfg = enclosureConfigs.brixx;
@@ -2261,6 +2269,9 @@ function openModuleInfo(pm){
   infoPm = pm; infoViewFn = () => openModuleViewer(pm.id); infoSelectFn = null;
   document.getElementById('info-delete').style.display = '';
   document.getElementById('info-select').style.display = 'none';
+  const db = document.getElementById('info-detach');
+  db.style.display = (!typeOf(pm).first && hasLeftNeighbour(pm) && (currentEnclosure === 'cabinet' || currentEnclosure === 'brixx')) ? '' : 'none';
+  db.textContent = gapOf(pm) > 0 ? 'Ankoppeln' : 'Entkoppeln';
   const idx = placedModules.indexOf(pm);
   const sm = m.stepModel && window.STEP_MODELS && window.STEP_MODELS[m.stepModel];
   const dims = sm ? `${sm.sizeMM[0].toFixed(1)} × ${sm.sizeMM[1].toFixed(1)} × ${sm.sizeMM[2].toFixed(1)} mm (B × H × T)` : null;
@@ -2342,6 +2353,15 @@ document.getElementById('info-delete').addEventListener('click', () => {
   if(i >= 0) removeModule(i);
 });
 document.getElementById('info-view').addEventListener('click', () => { if(infoViewFn) infoViewFn(); });
+document.getElementById('info-detach').addEventListener('click', () => {
+  const pm = infoPm; if(!pm) return;
+  if(gapOf(pm) > 0){ delete pm.gap; closeModuleInfo(); refreshAll(); toast('Modul angekoppelt.'); return; }
+  if(currentEnclosure === 'cabinet'){
+    const b = binById(pm.bin);
+    if(!b || binUsed(b) + DETACH_GAP > binRect(b).w + 1e-6){ toast('Im Bin ist nicht genug Platz, um das Modul zu entkoppeln.'); return; }
+  } else if(placedModules.length >= TOTAL_SLOTS){ toast('Nicht genug Platz zum Entkoppeln.'); return; }
+  pm.gap = DETACH_GAP; closeModuleInfo(); refreshAll(); toast('Modul entkoppelt – zum Verschieben ziehen.');
+});
 document.addEventListener('keydown', e => { if(e.key === 'Escape' && !document.getElementById('viewer-overlay').classList.contains('show') && !document.getElementById('confirm-overlay').classList.contains('show')) requestCloseInfo(); });
 
 /* =========================================================
@@ -2407,7 +2427,7 @@ function openCabinetInfo(o){
   const PH = '<span class="ph">Platzhalter – Information folgt</span>';
   infoPm = null; infoViewFn = () => openModelViewer({ stepModel:o.model, name:o.name, subLabel:'Typ ' + o.code });
   infoSelectFn = () => { selectCabinet(o.id); closeModuleInfo(); };
-  document.getElementById('info-delete').style.display = 'none';
+  document.getElementById('info-delete').style.display = 'none'; document.getElementById('info-detach').style.display = 'none';
   document.getElementById('info-select').style.display = '';
   document.getElementById('info-save').style.display = 'none'; infoDraft = null;
   document.getElementById('info-view').style.display = '';
@@ -2614,6 +2634,7 @@ function retarget(pm, cx, cy){
     }
   }
   others.splice(at, 0, pm);
+  delete pm.gap;
   placedModules = others;
 }
 function queueRebuild(){
@@ -2680,6 +2701,16 @@ function initModuleDrag(){
       const lp = computeLayout(placedModules).get(drag.pm);
       const pt = planePoint(e, lp.z);
       drag.off = pt ? { x: lp.x - pt.x, y: lp.y - pt.y } : { x: 0, y: 0 };
+      if(gapOf(drag.pm) > 0 && pt){ drag.slide = { x0: pt.x, g0: drag.pm.gap }; }
+    }
+    if(drag.slide){                                   // entkoppeltes Modul: nur entlang der Reihe verschieben
+      const lp = computeLayout(placedModules).get(drag.pm), pt = planePoint(e, lp.z); if(!pt) return;
+      let g = Math.max(0, drag.slide.g0 + pt.x - drag.slide.x0), maxG = 3;
+      if(currentEnclosure === 'cabinet'){ const b = binById(drag.pm.bin); if(b) maxG = binRect(b).w - (binUsed(b) - gapOf(drag.pm)); }
+      else maxG = Math.max(0, (TOTAL_SLOTS - placedModules.length) * BX.phW * 0.01 + gapOf(drag.pm));
+      g = Math.min(g, Math.max(0, maxG));
+      if(g < 0.06) g = 0.0001;                       // zum Ankoppeln bis zum Loslassen minimal offen halten
+      drag.pm.gap = g; if(currentEnclosure === 'brixx'){ updateBrixxInfo(); rebuildBins3D(); } queueRebuild(); return;
     }
     const lp = computeLayout(placedModules).get(drag.pm);
     const pt = planePoint(e, lp.z);
@@ -2712,7 +2743,7 @@ function initModuleDrag(){
     if(!drag) return;
     const d = drag; drag = null;
     controls.enabled = true; el.style.cursor = '';
-    if(d.active){ refreshAll(); }
+    if(d.active){ if(d.slide && d.pm.gap < 0.06){ delete d.pm.gap; toast('Modul angekoppelt.'); } refreshAll(); }
     else if(e.type === 'pointerup'){ openModuleInfo(d.pm); }
   };
   window.addEventListener('pointerup', end);
