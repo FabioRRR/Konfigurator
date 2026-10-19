@@ -866,6 +866,7 @@ const enclosureConfigs = {
       { id:'a104', name:'Q.bloxx-X A104 TCK', article:'556731', stepModel:'a104', desc:'Messmodul für DIN-Schiene, Variante TCK, mit steckbaren Klemmenblöcken und Status-LEDs', color:'#1B5FD6', price:690 },
       { id:'a105', name:'Q.bloxx-X A105 DB15', article:'563628', stepModel:'a105', desc:'Messmodul für DIN-Schiene, Variante DB15, mit DB15-Anschluss und Status-LEDs', color:'#1B5FD6', price:690 },
       { id:'a111', name:'Q.bloxx-X A111 BNC', article:'556832', stepModel:'a111', desc:'Messmodul für DIN-Schiene, Variante BNC, mit BNC-Anschlüssen und Status-LEDs', color:'#1B5FD6', price:690 },
+      { id:'d107', name:'Q.brixx-X D107 SV', article:'999999', stepModel:'d107', noTab:true, desc:'Q.brixx-X Modul D107 SV mit 2 × Lemo 2B', color:'#1B5FD6', price:690 },
       { id:'a128', name:'Q.bloxx-X A128', article:'565327', stepModel:'a128', desc:'Messmodul für DIN-Schiene', color:'#1B5FD6', price:690 },
       { id:'ai', name:'Q.series X — Analogeingang', desc:'8-Kanal Präzisions-Analogeingang, ±10V / ±20mA', color:'#1B5FD6', price:640 },
       { id:'di', name:'Q.series X — Digital I/O', desc:'16-Kanal digitaler Ein-/Ausgang, 24V', color:'#00A9C4', price:560 },
@@ -1498,7 +1499,7 @@ function computeLayout(list){
       if(li > 0) cur += gapOf(pm) ;
       const m = typeOf(pm), w = BX.phW * 0.01, sm = m.stepModel && window.STEP_MODELS && window.STEP_MODELS[m.stepModel];
       // Frontplatte (30,5 mm, im Modell um 1,7 mm nach links versetzt) füllt genau das Raster; Unterkante liegt auf der Unterkante der Griffe (y = 0)
-      out.set(pm, { x: cur + w/2 + 0.017, y: ((sm ? sm.sizeMM[1] : 143.7) * 0.5 - BX.tabMM) * 0.01, z: BX.z0, row: 0 });
+      out.set(pm, { x: cur + w/2 + 0.017, y: ((sm ? sm.sizeMM[1] : 143.7) * 0.5 - (m.noTab ? 0 : BX.tabMM)) * 0.01, z: BX.z0, row: 0 });
       cur += w;
     });
   } else {
