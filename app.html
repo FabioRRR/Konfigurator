@@ -348,6 +348,29 @@
   .btn-ghost:hover{border-color:var(--navy);}
   .wiz-foot .btn-primary:disabled{opacity:.4; cursor:not-allowed;}
   @media (max-width: 1280px){ .opt-grid{grid-template-columns:repeat(3, 1fr);} }
+  /* Frage 2: Messgrößen-Kacheln */
+  .meas-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(230px, 1fr)); gap:16px;}
+  .meas-tile{background:#fff; border:2px solid var(--line); border-radius:16px; padding:20px 20px 18px; cursor:pointer; position:relative; display:flex; flex-direction:column; gap:14px; text-align:left; font-family:inherit; transition:border-color .15s, box-shadow .15s, transform .15s;}
+  .meas-tile:hover{border-color:#B9C8E3; box-shadow:0 14px 30px -18px rgba(11,42,82,.45); transform:translateY(-1px);}
+  .meas-tile.selected{border-color:var(--blue); box-shadow:0 0 0 4px rgba(27,95,214,.14), 0 14px 30px -18px rgba(11,42,82,.45);}
+  .meas-ico{width:52px; height:52px; border-radius:13px; background:var(--blue-bg); color:var(--blue); display:flex; align-items:center; justify-content:center; transition:background .15s, color .15s;}
+  .meas-ico svg{width:28px; height:28px; stroke:currentColor; fill:none; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round;}
+  .meas-ico svg text{fill:currentColor; stroke:none; font-family:var(--font); font-weight:700; font-size:11px;}
+  .meas-tile.selected .meas-ico{background:var(--blue); color:#fff;}
+  .meas-tile h3{margin:0; font-size:16.5px; color:var(--navy);}
+  .meas-tile .meas-sub{margin:3px 0 0; font-size:13px; color:var(--muted);}
+  .meas-tile .meas-count{margin-top:auto; font-family:var(--mono); font-size:11px; letter-spacing:.04em; color:var(--muted-2); text-transform:uppercase;}
+  .meas-tile.selected .meas-count{color:var(--blue);}
+  .meas-tile .opt-check{top:16px; right:16px;}
+  .meas-tile.selected .opt-check{background:var(--blue); border-color:var(--blue);}
+  .meas-tools{display:flex; gap:10px; margin:-8px 0 20px;}
+  .meas-tools button{border:none; background:none; color:var(--blue); font-weight:600; font-size:13px; cursor:pointer; padding:4px 0; font-family:inherit;}
+  .meas-tools button:hover{text-decoration:underline;}
+  .mfilter{margin:0 0 12px; padding:10px 12px; background:var(--blue-bg); border:1px solid #CFE0FB; border-radius:10px; font-size:12.5px; color:var(--navy); display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+  .mfilter .chips{display:flex; gap:6px; flex-wrap:wrap; flex:1;}
+  .mfilter .chip{background:#fff; border:1px solid #CFE0FB; border-radius:999px; padding:2px 9px; font-weight:600; font-size:11.5px;}
+  .mfilter button{border:none; background:none; color:var(--blue); font-weight:600; font-size:12px; cursor:pointer; font-family:inherit;}
+  .mfilter button:hover{text-decoration:underline;}
   @media (max-width: 980px){ .opt-grid{grid-template-columns:repeat(2, 1fr);} }
   @media (max-width: 620px){ .opt-grid{grid-template-columns:1fr;} .opt-preview{height:230px;} }
   .view-toolbar{position:absolute; top:16px; left:16px; display:flex; gap:4px; background:#fff; border:1px solid var(--line); border-radius:8px; padding:4px; z-index:5;}
@@ -518,7 +541,7 @@
         <div class="hero-left">
           <h1>Projektkonfigurator</h1>
           <p>Erstellen Sie maßgeschneiderte Messtechnik-Lösungen für Ihre Anwendung – modular, flexibel und präzise.</p>
-          <button class="btn-primary" id="btn-new-project" onclick="projectDraft.cabinet = null; showView('wizard')"><span class="plus-circle">+</span>Neues Projekt anlegen</button>
+          <button class="btn-primary" id="btn-new-project" onclick="projectDraft.cabinet = null; projectDraft.measures = []; projectFilterOff = false; showView('wizard')"><span class="plus-circle">+</span>Neues Projekt anlegen</button>
         </div>
         <div class="stats-card">
           <div class="stat">
@@ -576,13 +599,21 @@
     </div>
   </header>
   <main class="wiz-main">
-    <div class="wiz-steps"><span class="dot">1</span><b>Frage 1</b><span>· Hardware</span></div>
-    <h1>Welche Hardware möchten Sie verwenden?</h1>
-    <p class="wiz-sub">Wählen Sie die Schaltschrankgröße für Ihr Projekt. Sie sehen jede Variante in 3D und können vorab weitere Informationen zur Hardware öffnen.</p>
-    <div class="opt-grid" id="opt-grid"></div>
+    <div class="wiz-steps"><span class="dot" id="wiz-dot">1</span><b id="wiz-qlabel">Frage 1</b><span id="wiz-qsub">· Hardware</span></div>
+    <section id="wiz-step1">
+      <h1>Welche Hardware möchten Sie verwenden?</h1>
+      <p class="wiz-sub">Wählen Sie die Schaltschrankgröße für Ihr Projekt. Sie sehen jede Variante in 3D und können vorab weitere Informationen zur Hardware öffnen.</p>
+      <div class="opt-grid" id="opt-grid"></div>
+    </section>
+    <section id="wiz-step2" style="display:none;">
+      <h1>Was möchten Sie messen?</h1>
+      <p class="wiz-sub">Wählen Sie alle Messgrößen aus, die Sie erfassen wollen. Im nächsten Schritt zeigen wir Ihnen nur Module, die diese Größen messen können.</p>
+      <div class="meas-tools"><button id="meas-all">Alle auswählen</button><button id="meas-none">Auswahl zurücksetzen</button></div>
+      <div class="meas-grid" id="meas-grid"></div>
+    </section>
   </main>
   <div class="wiz-foot">
-    <button class="btn-ghost" onclick="showView('dashboard')">← Zurück zum Dashboard</button>
+    <button class="btn-ghost" id="wiz-back">← Zurück zum Dashboard</button>
     <div class="grp"><span class="hint" id="wiz-hint">Bitte eine Hardware auswählen</span><button class="btn-primary" id="wiz-next" disabled>Weiter →</button></div>
   </div>
 </div>
@@ -862,15 +893,15 @@ const enclosureConfigs = {
     },
     moduleTypes: [
       { id:'qs', name:'Q.station X', article:'561828', stepModel:'qs', first:true, unique:true, desc:'Controller & Edge-Verarbeitung – steht immer am Anfang der Modulreihe, nur einmal pro Konfiguration', color:'#0B2A52', price:1450 },
-      { id:'a101', name:'Q.bloxx-X A101', article:'544223', stepModel:'a101', desc:'Messmodul für DIN-Schiene mit zwei steckbaren Klemmenblöcken und Status-LEDs A/B/C', color:'#1B5FD6', price:690 },
-      { id:'a104', name:'Q.bloxx-X A104 TCK', article:'556731', stepModel:'a104', desc:'Messmodul für DIN-Schiene, Variante TCK, mit steckbaren Klemmenblöcken und Status-LEDs', color:'#1B5FD6', price:690 },
-      { id:'a105', name:'Q.bloxx-X A105 DB15', article:'563628', stepModel:'a105', desc:'Messmodul für DIN-Schiene, Variante DB15, mit DB15-Anschluss und Status-LEDs', color:'#1B5FD6', price:690 },
-      { id:'a111', name:'Q.bloxx-X A111 BNC', article:'556832', stepModel:'a111', desc:'Messmodul für DIN-Schiene, Variante BNC, mit BNC-Anschlüssen und Status-LEDs', color:'#1B5FD6', price:690 },
-      { id:'d107', name:'Q.brixx-X D107 SV', article:'999999', stepModel:'d107', noTab:true, desc:'Q.brixx-X Modul D107 SV mit 2 × Lemo 2B', color:'#1B5FD6', price:690 },
-      { id:'a128', name:'Q.bloxx-X A128', article:'565327', stepModel:'a128', desc:'Messmodul für DIN-Schiene', color:'#1B5FD6', price:690 },
-      { id:'ai', name:'Q.series X — Analogeingang', desc:'8-Kanal Präzisions-Analogeingang, ±10V / ±20mA', color:'#1B5FD6', price:640 },
-      { id:'di', name:'Q.series X — Digital I/O', desc:'16-Kanal digitaler Ein-/Ausgang, 24V', color:'#00A9C4', price:560 },
-      { id:'um', name:'Q.series X — Universelles Messmodul', desc:'Universelles Messmodul, 16 Kanäle', color:'#1FA463', price:710 },
+      { id:'a101', name:'Q.bloxx-X A101', article:'544223', stepModel:'a101', desc:'Messmodul für DIN-Schiene mit zwei steckbaren Klemmenblöcken und Status-LEDs A/B/C', color:'#1B5FD6', price:690, measures:['temp','volt','curr','press'] },
+      { id:'a104', name:'Q.bloxx-X A104 TCK', article:'556731', stepModel:'a104', desc:'Messmodul für DIN-Schiene, Variante TCK, mit steckbaren Klemmenblöcken und Status-LEDs', color:'#1B5FD6', price:690, measures:['temp'] },
+      { id:'a105', name:'Q.bloxx-X A105 DB15', article:'563628', stepModel:'a105', desc:'Messmodul für DIN-Schiene, Variante DB15, mit DB15-Anschluss und Status-LEDs', color:'#1B5FD6', price:690, measures:['strain','press'] },
+      { id:'a111', name:'Q.bloxx-X A111 BNC', article:'556832', stepModel:'a111', desc:'Messmodul für DIN-Schiene, Variante BNC, mit BNC-Anschlüssen und Status-LEDs', color:'#1B5FD6', price:690, measures:['vib','volt'] },
+      { id:'d107', name:'Q.brixx-X D107 SV', article:'999999', stepModel:'d107', noTab:true, desc:'Q.brixx-X Modul D107 SV mit 2 × Lemo 2B', color:'#1B5FD6', price:690, measures:['pos'] },
+      { id:'a128', name:'Q.bloxx-X A128', article:'565327', stepModel:'a128', desc:'Messmodul für DIN-Schiene', color:'#1B5FD6', price:690, measures:['freq','dig'] },
+      { id:'ai', name:'Q.series X — Analogeingang', desc:'8-Kanal Präzisions-Analogeingang, ±10V / ±20mA', color:'#1B5FD6', price:640, measures:['volt','curr'] },
+      { id:'di', name:'Q.series X — Digital I/O', desc:'16-Kanal digitaler Ein-/Ausgang, 24V', color:'#00A9C4', price:560, measures:['dig'] },
+      { id:'um', name:'Q.series X — Universelles Messmodul', desc:'Universelles Messmodul, 16 Kanäle', color:'#1FA463', price:710, measures:['temp','volt','curr','strain','press','vib','freq','dig','pos'] },
       { id:'ps', name:'Netzteil 24V / 5A', desc:'Redundanzfähige Spannungsversorgung', color:'#8993A1', price:390 },
       { id:'sb', name:'Sicherungsblock', desc:'3-poliger Sicherungsblock', color:'#E29A2E', price:180 },
       { id:'ss', name:'Service-Steckdose', desc:'Schuko-Steckdose 230V', color:'#7BC47F', price:95 },
@@ -1061,7 +1092,11 @@ function renderRightPanel(){
   document.querySelector('.viewport-hint') && (document.querySelector('.viewport-hint').style.display = '');
 
   if(activeTab === 'modules'){
-    rpBody.innerHTML = MODULE_TYPES.map(m => {
+    const sel = (projectDraft.measures || []).filter(id => MEASURANDS.some(q => q.id === id));
+    const hasFilter = sel.length > 0 && currentEnclosure === 'cabinet';
+    const shown = MODULE_TYPES.filter(m => !hasFilter || moduleMatchesMeasures(m));
+    const bar = hasFilter ? `<div class="mfilter"><div class="chips"><span>${projectFilterOff ? 'Filter aus:' : 'Gefiltert nach:'}</span>${sel.map(id => `<span class="chip">${MEASURANDS.find(q => q.id === id).name}</span>`).join('')}</div><button id="mf-toggle">${projectFilterOff ? 'Filter aktivieren' : 'Alle Module zeigen'}</button></div>` : '';
+    rpBody.innerHTML = bar + shown.map(m => {
       const sm = m.stepModel && window.STEP_MODELS && window.STEP_MODELS[m.stepModel];
       const dims = sm ? `${sm.sizeMM[0].toFixed(0)} × ${sm.sizeMM[1].toFixed(0)} × ${sm.sizeMM[2].toFixed(0)} mm` : '';
       return `
@@ -1078,6 +1113,7 @@ function renderRightPanel(){
         </div>
       </div>`;
     }).join('');
+    const mft = document.getElementById('mf-toggle'); if(mft) mft.addEventListener('click', () => { projectFilterOff = !projectFilterOff; renderRightPanel(); });
     rpBody.querySelectorAll('.module-add').forEach(btn => btn.addEventListener('click', () => addModule(btn.dataset.id)));
     rpBody.querySelectorAll('.module-view').forEach(btn => btn.addEventListener('click', () => openModuleViewer(btn.dataset.view)));
   } else {
@@ -2379,7 +2415,77 @@ const cabinetOptions = [   // nach Größe sortiert; Name aus Breite × Höhe ×
   { id:'cab1059',    model:'cab_1059',    code:'1059.000', nw:600, nh:800, nd:400 },
   { id:'cab1091',    model:'cab_1091',    code:'1091.000', nw:600, nh:1000, nd:400 },
 ].map(o => ({ ...o, name:`Schaltschrank ${o.nw} × ${o.nh} × ${o.nd}` }));
-let projectDraft = { cabinet: null };
+const MEASURANDS = [
+  { id:'temp',   name:'Temperatur',        sub:'Thermoelemente, Pt100',
+    svg:'<path d="M10 14.5V5a2 2 0 1 1 4 0v9.5a4 4 0 1 1-4 0z"/><path d="M12 9v8"/>' },
+  { id:'volt',   name:'Spannung',          sub:'Gleichspannung, z. B. ±10 V',
+    svg:'<path d="M13 2 5 13.5h6L10 22l8-11.5h-6z"/>' },
+  { id:'curr',   name:'Strom',             sub:'Stromschleifen, z. B. 4…20 mA',
+    svg:'<circle cx="12" cy="12" r="9"/><text x="12" y="15.6" text-anchor="middle">A</text>' },
+  { id:'strain', name:'Dehnung / Kraft',   sub:'DMS, Wägezellen, Brücken',
+    svg:'<path d="M3 8c6-5 12-5 18 0"/><path d="M3 12c6-5 12-5 18 0"/><path d="M3 16c6-5 12-5 18 0"/><path d="M3 20h18"/>' },
+  { id:'press',  name:'Druck',             sub:'Drucksensoren, Drucktransmitter',
+    svg:'<path d="M4.5 18a9 9 0 1 1 15 0"/><path d="M12 14l4-5"/><circle cx="12" cy="14" r="1.2"/><path d="M12 5v1.5M5.6 8.6l1 1M18.4 8.6l-1 1"/>' },
+  { id:'vib',    name:'Vibration',         sub:'Beschleunigung, IEPE-Sensoren',
+    svg:'<path d="M3 12h2.5l2-6 3 12 3-12 3 12 2-6H21"/>' },
+  { id:'freq',   name:'Frequenz / Drehzahl', sub:'Zähler, Impulse, Drehgeber',
+    svg:'<path d="M20.5 12a8.5 8.5 0 1 1-2.6-6.1"/><path d="M20.5 3.5v4.4h-4.4"/>' },
+  { id:'dig',    name:'Digitale Signale',  sub:'Zustände, Schaltereignisse',
+    svg:'<path d="M3 16h4V8h5v8h5V8h4"/>' },
+  { id:'pos',    name:'Weg / Position',    sub:'Wegsensoren, Positionsgeber',
+    svg:'<path d="M3 5v14M21 5v14"/><path d="M7 12h10M9.5 9.5 7 12l2.5 2.5M14.5 9.5 17 12l-2.5 2.5"/>' },
+];
+let projectDraft = { cabinet: null, measures: [], step: 1 };
+// Anzeige im Modulkatalog: Module ohne Messfunktion (Station, Zubehör) bleiben immer sichtbar
+function moduleMatchesMeasures(m){
+  const sel = projectDraft.measures;
+  if(!sel || !sel.length || projectFilterOff || !m.measures) return true;
+  return m.measures.some(x => sel.includes(x));
+}
+let projectFilterOff = false;
+function measureCount(id){ return MODULE_TYPES.filter(m => m.measures && m.measures.includes(id)).length; }
+function renderMeasureTiles(){
+  const grid = document.getElementById('meas-grid');
+  grid.innerHTML = MEASURANDS.map(q => {
+    const on = projectDraft.measures.includes(q.id), n = enclosureConfigs.cabinet.moduleTypes.filter(m => m.measures && m.measures.includes(q.id)).length;
+    return `<button type="button" class="meas-tile${on ? ' selected' : ''}" data-id="${q.id}" aria-pressed="${on}">
+      <span class="opt-check">✓</span>
+      <span class="meas-ico"><svg viewBox="0 0 24 24" aria-hidden="true">${q.svg}</svg></span>
+      <span><h3>${q.name}</h3><p class="meas-sub">${q.sub}</p></span>
+      <span class="meas-count">${n} ${n === 1 ? 'passendes Modul' : 'passende Module'}</span>
+    </button>`;
+  }).join('');
+  grid.querySelectorAll('.meas-tile').forEach(t => t.addEventListener('click', () => {
+    const id = t.dataset.id, i = projectDraft.measures.indexOf(id);
+    if(i >= 0) projectDraft.measures.splice(i, 1); else projectDraft.measures.push(id);
+    renderMeasureTiles(); updateWizardFooter();
+  }));
+}
+function updateWizardFooter(){
+  const next = document.getElementById('wiz-next'), hint = document.getElementById('wiz-hint'), back = document.getElementById('wiz-back');
+  if(projectDraft.step === 1){
+    const sel = cabinetOptions.find(x => x.id === projectDraft.cabinet);
+    next.disabled = !sel; next.textContent = 'Weiter →'; back.textContent = '← Zurück zum Dashboard';
+    hint.textContent = sel ? `Ausgewählt: ${sel.name} (Typ ${sel.code})` : 'Bitte eine Hardware auswählen';
+  } else {
+    const n = projectDraft.measures.length;
+    next.disabled = n === 0; next.textContent = 'Weiter zur Konfiguration →'; back.textContent = '← Zurück zur Hardware';
+    hint.textContent = n ? `${n} ${n === 1 ? 'Messgröße' : 'Messgrößen'} ausgewählt` : 'Bitte mindestens eine Messgröße auswählen';
+  }
+}
+function setWizardStep(n){
+  projectDraft.step = n;
+  document.getElementById('wiz-step1').style.display = n === 1 ? '' : 'none';
+  document.getElementById('wiz-step2').style.display = n === 2 ? '' : 'none';
+  document.getElementById('wiz-dot').textContent = n;
+  document.getElementById('wiz-qlabel').textContent = 'Frage ' + n;
+  document.getElementById('wiz-qsub').textContent = n === 1 ? '· Hardware' : '· Messaufgabe';
+  if(n === 2) renderMeasureTiles();
+  updateWizardFooter(); window.scrollTo(0, 0);
+}
+document.getElementById('wiz-back').addEventListener('click', () => { if(projectDraft.step === 2) setWizardStep(1); else showView('dashboard'); });
+document.getElementById('meas-all').addEventListener('click', () => { projectDraft.measures = MEASURANDS.map(q => q.id); renderMeasureTiles(); updateWizardFooter(); });
+document.getElementById('meas-none').addEventListener('click', () => { projectDraft.measures = []; renderMeasureTiles(); updateWizardFooter(); });
 let wizPrev = null;
 
 function optDims(o){
@@ -2412,15 +2518,14 @@ function renderWizardCards(){
       if(act === 'info') openCabinetInfo(o); else selectCabinet(o.id);
     });
   });
-  const next = document.getElementById('wiz-next'), hint = document.getElementById('wiz-hint');
-  const sel = cabinetOptions.find(x => x.id === projectDraft.cabinet);
-  next.disabled = !sel;
-  hint.textContent = sel ? `Ausgewählt: ${sel.name} (Typ ${sel.code})` : 'Bitte eine Hardware auswählen';
+  updateWizardFooter();
   if(wizPrev) attachWizardCanvases();
 }
 function selectCabinet(id){ projectDraft.cabinet = id; renderWizardCards(); }
 document.getElementById('wiz-next').addEventListener('click', () => {
-  const sel = cabinetOptions.find(x => x.id === projectDraft.cabinet); if(!sel) return;
+  if(projectDraft.step === 1){ if(!cabinetOptions.find(x => x.id === projectDraft.cabinet)) return; setWizardStep(2); return; }
+  if(!projectDraft.measures.length) return;
+  projectFilterOff = false;
   showView('configurator', 'cabinet');
 });
 
@@ -2507,6 +2612,7 @@ function wizardLoop(){
   });
 }
 function startWizard(){
+  setWizardStep(1);
   renderWizardCards();
   initWizardPreviews(); attachWizardCanvases();
   if(!wizPrev.running){ wizPrev.running = true; wizardLoop(); }
